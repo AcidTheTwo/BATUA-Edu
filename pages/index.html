@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,1..1000&display=swap" rel="stylesheet">
+  <script>
+    var u = null;
+    try { u = JSON.parse(localStorage.getItem('batua_user') || 'null') } catch (e) {}
+    if (u) window.location.replace('dashboard.html');
+  </script>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header id="alt" class="landing-header">
+    <div class="landing-nav-inner">
+      <a href="index.html" class="brand">
+        <div class="brand-icon">B</div>
+        <span class="brand-text">BATUA<span>-Edu</span></span>
+      </a>
+      <nav class="landing-links">
+        <a href="#markets">Featured Markets</a>
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#about">About</a>
+      </nav>
+      <div id="auth" class="flex gap-2">
+        <a href="auth.html?mode=login" class="btn btn-ghost">Log In</a>
+        <a href="auth.html?mode=register" class="btn btn-primary">Sign Up</a>
+      </div>
+    </div>
+  </header>
+
+  <section class="landing-section landing-hero grid lg-grid-2 gap-12 items-center">
+    <div>
+      <h1 class="hero-title">Learn Trading.<br>Experience Markets.<br><span class="text-sky">Risk Nothing.</span></h1>
+      <p class="hero-sub">Practice stocks and crypto with virtual money.</p>
+      <div class="mt-7 flex gap-3">
+        <a style="font-family: 'Google Sans Flex', -apple-system, BlinkMacSystemFont, sans-serif;" href="auth.html?mode=register" class="btn btn-primary btn-lg">Get Started &mdash; it's free</a>
+        <a style="font-family: 'Google Sans Flex', -apple-system, BlinkMacSystemFont, sans-serif;" href="markets.html" class="btn btn-ghost btn-lg">Explore Markets</a>
+      </div>
+    </div>
+    <div class="card p-5">
+      <div class="flex justify-between mb-2">
+        <p class="text-sm font-semibold text-slate-300">Bitcoin &middot; Live</p>
+        <span class="text-xs text-slate-500">BTC</span>
+      </div>
+      <div class="h-64"><canvas id="hero"></canvas></div>
+    </div>
+  </section>
+
+  <section class="section-band">
+    <div class="stats-band-inner md-grid-4">
+      <div><p id="stat-traders" class="text-2xl font-extrabold text-white">—</p><p class="text-xs text-slate-500 mt-1">Registered traders</p></div>
+      <div><p id="stat-assets" class="text-2xl font-extrabold text-white">—</p><p class="text-xs text-slate-500 mt-1">Listed assets</p></div>
+      <div><p id="stat-trades" class="text-2xl font-extrabold text-white">—</p><p class="text-xs text-slate-500 mt-1">Trades executed</p></div>
+      <div><p id="stat-volume" class="text-2xl font-extrabold text-white">—</p><p class="text-xs text-slate-500 mt-1">Virtual volume (VC)</p></div>
+    </div>
+  </section>
+
+  <section id="markets" class="landing-section">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="section-heading">Featured Markets</h2>
+      <a href="markets.html" class="link-sky text-sm">View all &rarr;</a>
+    </div>
+    <div id="featured" class="grid sm-grid-2 lg-grid-4 gap-4"></div>
+  </section>
+
+  <section id="how" class="section-band">
+    <div class="landing-section">
+      <h2 class="section-heading mb-8">How It Works</h2>
+      <div class="grid md-grid-3 gap-4">
+        <div class="card p-6">
+          <p class="text-sky font-extrabold">01</p>
+          <h3 class="font-bold text-white mt-2">Create your account</h3>
+          <p class="text-slate-400 mt-2">Create a new account and recieve a starting account balance of 10,000 VC.</p>
+        </div>
+        <div class="card p-6">
+          <p class="text-sky font-extrabold">02</p>
+          <h3 class="font-bold text-white mt-2">Trade stocks &amp; crypto</h3>
+          <p class="text-slate-400 mt-2">Buy and sell various assets with fractional quantities, charts and risk labels.</p>
+        </div>
+        <div class="card p-6">
+          <p class="text-sky font-extrabold">03</p>
+          <h3 class="font-bold text-white mt-2">Learn, lend &amp; climb</h3>
+          <p class="text-slate-400 mt-2">Build a portfolio, trade with other users, and climb the leaderboard.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="landing-section">
+    <h2 class="section-heading mb-8">Built For Robust Financial Education</h2>
+    <div class="grid sm-grid-2 lg-grid-4 gap-4" id="feat"></div>
+  </section>
+
+  <section id="about" class="about-section">
+    <h2 class="section-heading">About BATUA-Edu</h2>
+    <p class="text-slate-400 mt-4 leading-relaxed"><span class="text-slate-200 font-semibold">BATUA-Edu</span> &mdash; Balanced Asset Trading and User-Ledger Architecture for Education &mdash; recreates the core of a real trading platform: database storage, ACID trade execution, immutable ledgers, wallet accounting, lending pools and role-based administration. Prices are pulled live and clearly labelled. The goal is to encourage financial literacy. Do not consider this to be financial advice in any way, shape or form.</p>
+  </section>
+
+  <footer class="landing-footer">
+    &copy; 2026 PRIMARY K's &middot; A Minor Project for CSBB 204 (DBMS) By: Kushagra K. Singh, Kunga Tsewang, Krishna Gautam &amp; Kaustubh Gavandgave
+  </footer>
+
+  <script>
+
+    function money(n) {
+      return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    var F = [
+      ['Risk-Free Practice', 'Trade with Virtual Currency. Every mistake is a lesson, never a devastation.'],
+      ['Database-Backed Ledger', 'Every unit tracked in a database with immutable history.'],
+      ['Atomic Transactions', 'Buys, sells, transfers and loans follow ACID principles.'],
+      ['Live Market Feed', 'Real-time ticker updates prices, 24h changes and history logs.'],
+      ['P2P Transfers', 'Buy, Sell or Exchange assets with other users in any fractional quantity.'],
+      ['Lending & Borrowing', 'Lend idle funds to the credit pool; borrow against your portfolio with LTV limits.'],
+      ['Global Leaderboard', 'Ranked by net worth &mdash; compete on various other tracked stats.'],
+      ['Admin Oversight', 'Asset listings, user monitoring, system logs and balance audits.']
+    ];
+    document.getElementById('feat').innerHTML = F.map(function (f) {
+      return '<div class="card p-5"><h3 class="font-semibold text-white text-sm">' + f[0] + '</h3><p class="text-xs text-slate-400 mt-2 leading-relaxed">' + f[1] + '</p></div>';
+    }).join('');
+
+    // Load Featured Markets from MySQL backend
+    async function loadFeaturedMarkets() {
+      try {
+        var res = await fetch('/api/assets');
+        var assets = await res.json();
+        document.getElementById('featured').innerHTML = assets.slice(0, 8).map(function (a) {
+          var pct = Number(a.price_change || 0);
+          var c = pct >= 0 ? 'text-gain' : 'text-loss';
+          var t = a.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock';
+          return '<a href="assets.html?id=' + a.asset_id + '" class="card card-hover p-4">' +
+            '<div class="flex justify-between items-center">' +
+              '<span class="font-bold text-white">' + a.symbol + '</span>' +
+              '<span class="badge ' + t + '">' + a.asset_type + '</span>' +
+            '</div>' +
+            '<p class="text-xs text-slate-500 mt-0-5 truncate">' + a.name + '</p>' +
+            '<p class="mt-3 font-semibold">' + money(a.current_price) + ' VC</p>' +
+            '<p class="text-xs font-semibold ' + c + '">' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% (24h)</p>' +
+          '</a>';
+        }).join('');
+      } catch (err) {
+        console.error('Failed to load featured markets:', err);
+      }
+    }
+
+    // Load BTC Chart from MySQL backend
+    var heroChart = null;
+    async function loadBtcChart() {
+      try {
+        var res = await fetch('/api/hero-history');
+        var history = await res.json();
+        var ctx = document.getElementById('hero');
+        var ptRadius = history.prices.length < 15 ? 3 : 0;
+
+        if (!heroChart) {
+          heroChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: history.labels,
+              datasets: [{
+                data: history.prices,
+                borderColor: '#D6C2A3',
+                backgroundColor: 'rgba(214, 194, 163, 0.14)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: ptRadius,
+                borderWidth: 2
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              animation: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { display: false },
+                y: { ticks: { color: '#8C7D68', font: { size: 10 } }, grid: { color: 'rgba(58, 48, 41, 0.6)' } }
+              }
+            }
+          });
+        } else {
+          heroChart.data.labels = history.labels;
+          heroChart.data.datasets[0].data = history.prices;
+          heroChart.data.datasets[0].pointRadius = ptRadius;
+          heroChart.update('none');
+        }
+      } catch (err) {
+        console.error('Failed to load BTC chart:', err);
+      }
+    }
+
+    function formatVolume(n) {
+      if (n >= 10000000) return (n / 10000000).toFixed(2) + 'Cr';
+      if (n >= 100000) return (n / 100000).toFixed(2) + 'L';
+      return Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    }
+
+    async function loadStats() {
+      try {
+        var res = await fetch('/api/stats');
+        var s = await res.json();
+        if (s.error) return;
+        document.getElementById('stat-traders').textContent = s.traders.toLocaleString('en-IN');
+        document.getElementById('stat-assets').textContent = s.assets.toLocaleString('en-IN');
+        document.getElementById('stat-trades').textContent = s.trades.toLocaleString('en-IN');
+        document.getElementById('stat-volume').textContent = formatVolume(s.volume);
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    let lastSlotKey = '';
+    let intervalCounter = 0;
+    const INTERVALS_PER_SHIFT = 1; // Change to 3 or 4 to make the chart shift even slower
+
+    const evtSource = new EventSource('/api/stream');
+    evtSource.onmessage = function (e) {
+      const tick = JSON.parse(e.data);
+      if (tick.symbol === 'BTC' && heroChart) {
+        var labels = heroChart.data.labels;
+        var dataset = heroChart.data.datasets[0].data;
+        if (dataset.length === 0) return;
+
+        // 1. ALWAYS update the current tip smoothly in place on every tick (prevents jitter)
+        dataset[dataset.length - 1] = tick.current_price;
+
+        var now = new Date();
+        // Create a unique key for each 30-second block (e.g. "14:35:00" or "14:35:30")
+        var currentSlotKey = now.getHours() + ':' + now.getMinutes() + ':' + (now.getSeconds() >= 30 ? '30' : '00');
+
+        // 2. When a new 30s database snapshot slot arrives:
+        if (currentSlotKey !== lastSlotKey) {
+          lastSlotKey = currentSlotKey;
+          intervalCounter++;
+
+          // 3. Only step the chart forward and shift every N intervals (e.g. every 2nd interval = 1 minute)
+          if (intervalCounter >= INTERVALS_PER_SHIFT) {
+            intervalCounter = 0;
+            var timeLabel = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            
+            labels.push(timeLabel);
+            dataset.push(tick.current_price);
+            
+            if (labels.length > 60) {
+              labels.shift();
+              dataset.shift();
+            }
+          }
+        }
+
+        heroChart.update('none');
+      }
+    };
+
+    loadStats();
+    loadFeaturedMarkets();
+    loadBtcChart();
+    setInterval(function () {
+      loadStats();
+      loadFeaturedMarkets();
+    }, 30000);
+  </script>
+</body>
+</html>

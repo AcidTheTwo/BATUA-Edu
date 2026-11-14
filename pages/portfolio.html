@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>My Portfolio &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <main class="app-main"><div class="container" id="page"></div></main>
+  <script>
+    function getUser(){try{return JSON.parse(localStorage.getItem('batua_user')||'null')}catch(e){return null}}
+    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+    function money(n,d){return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})}
+    function pct(n){return (Number(n||0)>=0?'+':'')+Number(n||0).toFixed(2)+'%'}
+    function plCls(n){return Number(n||0)>=0?'text-gain':'text-loss'}
+    function toast(m,t){
+  var b=document.getElementById('toasts');
+  if(!b){b=document.createElement('div');b.id='toasts';b.className='toast-container';document.body.appendChild(b)}
+  var e=document.createElement('div');
+  e.className='card toast '+(t==='success'?'toast-success':'toast-error');
+  e.textContent=m;
+  b.appendChild(e);
+  setTimeout(function(){e.remove()},4000);
+}
+    var NAV=[['dashboard.html','Dashboard'],['markets.html','Markets'],['portfolio.html','My Portfolio'],['wallet.html','Wallet'],['transactions.html','Transactions'],['transfers.html','P2P Transfers'],['lending.html','Lending & Borrowing'],['leaderboard.html','Leaderboard'],['profile.html','Profile']];
+function shell(active){
+  var u=getUser();
+  if(!u){location.href='login.html';return null}
+  var links=NAV.slice();
+  if(u.role==='admin')links.push(['admin.html','Admin Panel']);
+  var sb='<aside id="sb" class="sidebar"><div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div><nav class="sidebar-nav">'+links.map(function(l){return '<a href="'+l[0]+'" class="nav-link'+(l[0]===active?' active':'')+'">'+l[1]+'</a>'}).join('')+'<a href="login.html" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a></nav></aside>';
+  var tb='<header class="topbar"><div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button><span class="badge-mock">MOCK PREVIEW</span></div><div class="topbar-right"><div class="user-meta"><p class="user-meta-name">'+esc(u.full_name)+'</p><p class="user-meta-sub">@'+esc(u.username)+' &middot; '+esc(u.role)+'</p></div><div class="avatar">'+esc((u.full_name||'U')[0].toUpperCase())+'</div></div></header>';
+  document.body.insertAdjacentHTML('afterbegin',sb+tb);
+  return u;
+}
+    var SK='batua_state_v1';
+    function getState(){try{var s=JSON.parse(localStorage.getItem(SK));if(s)return s}catch(e){}var s={balance:6492.6,holdings:[{id:1,symbol:'BTC',name:'Bitcoin',type:'CRYPTO',qty:0.01,avg:65200,price:67250},{id:9,symbol:'TCS',name:'Tata Consultancy Services',type:'STOCK',qty:0.5,avg:4010,price:4120},{id:3,symbol:'SOL',name:'Solana',type:'CRYPTO',qty:6,avg:158.4,price:172.4}],txns:[{id:'WLT-1',type:'CREDIT',label:'Welcome bonus',qty:null,amount:10000,date:Date.now()-38*864e5}],lends:[],loans:[],transfers:[]};localStorage.setItem(SK,JSON.stringify(s));return s}
+    function saveState(s){localStorage.setItem(SK,JSON.stringify(s))}
+    shell('portfolio.html');
+    function render(){
+      var s=getState();var h=s.holdings;
+      var inv=h.reduce(function(t,x){return t+x.qty*x.avg},0);
+      var val=h.reduce(function(t,x){return t+x.qty*x.price},0);
+      var pl=val-inv;
+      var rows=h.length?h.map(function(x){
+        var i=x.qty*x.avg,v=x.qty*x.price,p=v-i,pp=i>0?p/i*100:0;
+        var tc=x.type==='CRYPTO'?'type-crypto':'type-stock';
+        return '<tr><td class="td"><div class="flex items-center gap-2"><span class="badge '+tc+'">'+x.type+'</span><div><p class="font-semibold text-white">'+esc(x.symbol)+'</p><p class="text-11 text-slate-500">'+esc(x.name)+'</p></div></div></td><td class="td text-right">'+x.qty+'</td><td class="td text-right">'+money(x.avg)+'</td><td class="td text-right">'+money(i)+'</td><td class="td text-right font-medium">'+money(v)+'</td><td class="td text-right font-semibold '+plCls(p)+'">'+(p>=0?'+':'')+money(p)+'</td><td class="td text-right font-semibold '+plCls(pp)+'">'+pct(pp)+'</td><td class="td text-right"><button class="btn btn-loss btn-sm" onclick="sell('+x.id+')">Sell</button></td></tr>'
+      }).join(''):'<tr><td colspan="8" class="td text-center text-slate-500">No holdings yet. Buy an asset from Markets.</td></tr>';
+      document.getElementById('page').innerHTML='<div class="page-header"><h1 class="page-title">My Portfolio</h1><p class="page-subtitle">Live from your demo ledger &middot; updates when you trade.</p></div><div class="grid sm-grid-2 xl-grid-4 gap-4"><div class="card p-5"><p class="stat-label">Current Value</p><p class="stat-value">'+money(val)+' TUA</p></div><div class="card p-5"><p class="stat-label">Total Invested</p><p class="stat-value">'+money(inv)+' TUA</p></div><div class="card p-5"><p class="stat-label">Unrealised P&amp;L</p><p class="stat-value '+plCls(pl)+'">'+(pl>=0?'+':'')+money(pl)+' TUA</p><p class="text-xs mt-1 '+plCls(pl)+'">'+pct(inv>0?pl/inv*100:0)+'</p></div><div class="card p-5"><p class="stat-label">Positions</p><p class="stat-value">'+h.length+'</p></div></div><div class="grid lg-grid-3 gap-4 mt-4"><div class="card lg-col-span-2"><div class="px-5 pt-4 pb-3"><h3 class="font-semibold">Performance &middot; 7D</h3></div><div class="px-5 pb-5 h-64"><canvas id="line"></canvas></div></div><div class="card p-5"><h3 class="font-semibold mb-2">Allocation</h3><div class="h-56"><canvas id="pie"></canvas></div></div></div><div class="card table-wrap mt-4"><table class="min-w-860"><thead><tr><th class="th">Asset</th><th class="th text-right">Qty</th><th class="th text-right">Avg Cost</th><th class="th text-right">Invested</th><th class="th text-right">Mkt Value</th><th class="th text-right">P&amp;L</th><th class="th text-right">Return</th><th class="th text-right">Action</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+      var labels=[],data=[],v=val*0.96;for(var i=0;i<28;i++){labels.push('');v*=1+(Math.random()-0.47)*0.012;data.push(+v.toFixed(2))}data[data.length-1]=val;
+      new Chart(document.getElementById('line'),{type:'line',data:{labels:labels,datasets:[{data:data,borderColor:'#34D399',backgroundColor:'rgba(52,211,153,.15)',fill:true,tension:.4,pointRadius:0,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{ticks:{color:'#64748B',font:{size:10}},grid:{color:'rgba(28,42,68,.6)'}}}}});
+      if(h.length)new Chart(document.getElementById('pie'),{type:'doughnut',data:{labels:h.map(function(x){return x.symbol}),datasets:[{data:h.map(function(x){return x.qty*x.price}),backgroundColor:['#38BDF8','#34D399','#A78BFA','#FBBF24','#F87171','#F472B6'],borderWidth:0}]},options:{cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:'#94A3B8',font:{size:11}}}}}});
+    }
+    function sell(id){var s=getState();var h=s.holdings.find(function(x){return x.id===id});if(!h)return;var q=Number(prompt('Quantity to sell (you hold '+h.qty+' '+h.symbol+'):',h.qty));if(!(q>0))return;if(q>h.qty)return toast('You hold only '+h.qty);var val=q*h.price;h.qty-=q;if(h.qty<=1e-9)s.holdings=s.holdings.filter(function(x){return x.id!==id});s.balance+=val;s.txns.unshift({id:'TRD-'+Date.now(),type:'SELL',label:'Sold '+q+' '+h.symbol,qty:q,amount:val,date:Date.now()});saveState(s);toast('Sold '+q+' '+h.symbol+' for '+money(val)+' TUA','success');render()}
+    render();
+  </script>
+</body>
+</html>

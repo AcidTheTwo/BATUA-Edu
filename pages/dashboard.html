@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">B</div>
+      <span class="brand-text">BATUA<span>-Edu</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link active">Dashboard</a>
+      <a href="markets.html" class="nav-link">Markets</a>
+      <a href="portfolio.html" class="nav-link">My Portfolio</a>
+      <a href="wallet.html" class="nav-link">Wallet</a>
+      <a href="transactions.html" class="nav-link">Transactions</a>
+      <a href="transfers.html" class="nav-link">P2P Transfers</a>
+      <a href="lending.html" class="nav-link">Lending &amp; Borrowing</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+      <a href="profile.html" class="nav-link">Profile</a>
+      <a href="admin.html" class="nav-link">Admin Panel</a>
+      <button id="logout" class="nav-link">Logout</button>
+    </nav>
+    <div class="sidebar-footer">Educational platform &middot; No real money</div>
+  </aside>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
+      <span class="badge-mock">MOCK PREVIEW</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-meta">
+        <p id="topname" class="user-meta-name"></p>
+        <p id="topuser" class="user-meta-sub"></p>
+      </div>
+      <div id="topavatar" class="avatar"></div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="container" id="page">
+      <div class="flex justify-center py-20"><div class="spinner"></div></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script>
+    var user;
+    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch(e) { user = null; }
+    if (!user) { location.href = 'login.html'; }
+    document.getElementById('logout').onclick = function(){ localStorage.removeItem('batua_user'); location.href = 'index.html'; };
+    document.getElementById('topname').textContent = user.full_name;
+    document.getElementById('topuser').textContent = '@' + user.username + ' · ' + user.role;
+    document.getElementById('topavatar').textContent = (user.full_name || 'U').charAt(0).toUpperCase();
+
+    var holdings = [
+      { symbol:'BTC', type:'CRYPTO', qty:0.01, value:672.5, pl:20.5 },
+      { symbol:'TCS', type:'STOCK',  qty:0.5,  value:2060,  pl:55 },
+      { symbol:'SOL', type:'CRYPTO', qty:6,    value:1034.4, pl:84 }
+    ];
+    var wallet = 6492.6, invested = 3607.4, hv = 3766.9, net = 9959.5, daily = 42.3, rank = 2, total = 5;
+    var gainers = [
+      {symbol:'SOL',name:'Solana',price:172.4,chg:5.61,id:3},
+      {symbol:'TSLA',name:'Tesla',price:242.7,chg:4.2,id:15},
+      {symbol:'BTC',name:'Bitcoin',price:67250,chg:2.34,id:1},
+      {symbol:'AAPL',name:'Apple',price:228.5,chg:2.75,id:12}
+    ];
+    var recent = [
+      {type:'BUY',sym:'SOL',qty:6,amt:950.4},
+      {type:'SELL',sym:'DOGE',qty:1200,amt:165.6},
+      {type:'BUY',sym:'TCS',qty:0.5,amt:2005}
+    ];
+    var series = []; var v = 9600;
+    for (var i=42;i>=0;i--){ series.push({t:i, value:+(v+= (Math.random()-0.47)*120).toFixed(2)}); }
+    series[series.length-1].value = net;
+    function plCls(n){ return n>=0 ? 'text-gain' : 'text-loss'; }
+    function money(n){ return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+    var pl = hv - invested;
+    document.getElementById('page').innerHTML =
+      '<div class="page-header"><h1 class="page-title">Dashboard</h1><p class="page-subtitle">Welcome back, '+user.full_name+'.</p></div>'+
+      '<div class="grid sm-grid-2 xl-grid-4 gap-4">'+
+        '<div class="card p-5"><p class="stat-label">Wallet Balance</p><p class="stat-value">'+money(wallet)+' TUA</p></div>'+
+        '<div class="card p-5"><p class="stat-label">Portfolio Value</p><p class="stat-value">'+money(hv)+' TUA</p><p class="text-xs mt-1 text-slate-500">Invested '+money(invested)+' TUA</p></div>'+
+        '<div class="card p-5"><p class="stat-label">Total P&amp;L</p><p class="stat-value '+plCls(pl)+'">'+(pl>=0?'+':'')+money(pl)+' TUA</p><p class="text-xs mt-1 '+plCls(pl)+'">'+(pl>=0?'+':'')+((pl/invested)*100).toFixed(2)+'%</p></div>'+
+        '<div class="card p-5"><p class="stat-label">Daily P&amp;L</p><p class="stat-value '+plCls(daily)+'">+'+money(daily)+' TUA</p><p class="text-xs mt-1 text-slate-500">Net worth '+money(net)+' TUA</p></div>'+
+      '</div>'+
+      '<div class="grid lg-grid-3 gap-4 mt-4">'+
+        '<div class="card lg-col-span-2"><div class="px-5 pt-4 pb-3"><h3 class="font-semibold">Portfolio Performance &middot; 7D</h3></div><div class="px-5 pb-5 h-72"><canvas id="perf"></canvas></div></div>'+
+        '<div class="space-y-4">'+
+          '<div class="card p-5"><p class="stat-label">Leaderboard position</p><p class="text-3xl font-extrabold text-white mt-1">#'+rank+'</p><p class="text-xs text-slate-500 mt-1">of '+total+' traders</p><a href="leaderboard.html" class="link-sky mt-3" style="display:inline-block">View leaderboard &rarr;</a></div>'+
+          '<div class="card p-5"><h3 class="font-semibold mb-3">Top Gainers</h3><div class="space-y-2-5">'+gainers.map(function(g){ return '<a class="gainer-row" href="asset.html?id='+g.id+'"><div><p class="text-sm font-semibold text-white">'+g.symbol+'</p><p class="text-11 text-slate-500">'+g.name+'</p></div><div class="text-right"><p class="text-sm">'+money(g.price)+'</p><p class="text-11 font-semibold '+plCls(g.chg)+'">'+(g.chg>=0?'+':'')+g.chg.toFixed(2)+'%</p></div></a>'; }).join('')+'</div></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="grid lg-grid-2 gap-4 mt-4">'+
+        '<div class="card p-5"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">Holdings</h3><a href="portfolio.html" class="link-sky">View all &rarr;</a></div>'+holdings.map(function(h){ return '<div class="flex items-center justify-between py-1-5"><div class="flex items-center gap-2"><span class="font-semibold text-white">'+h.symbol+'</span><span class="text-xs text-slate-500">'+h.qty+' units</span></div><div class="text-right"><p class="text-sm">'+money(h.value)+' TUA</p><p class="text-11 font-semibold '+plCls(h.pl)+'">'+(h.pl>=0?'+':'')+money(h.pl)+'</p></div></div>'; }).join('')+'</div>'+
+        '<div class="card p-5"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">Recent Trades</h3><a href="transactions.html" class="link-sky">History &rarr;</a></div>'+recent.map(function(t){ return '<div class="flex items-center justify-between py-1-5"><div><span class="text-11 font-bold mr-2 '+(t.type==='BUY'?'text-gain':'text-loss')+'">'+t.type+'</span><span class="font-semibold text-white">'+t.sym+'</span><span class="text-xs text-slate-500 ml-2">'+t.qty+'</span></div><div class="text-right"><p class="text-sm">'+money(t.amt)+' TUA</p></div></div>'; }).join('')+'</div>'+
+      '</div>';
+
+    new Chart(document.getElementById('perf'), {
+      type:'line',
+      data:{ labels:series.map(function(s){return s.t+'h';}), datasets:[{ data:series.map(function(s){return s.value;}), borderColor:'#34D399', backgroundColor:'#34D39933', fill:true, tension:0.35, pointRadius:0, borderWidth:2 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:'#64748B',maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(28,42,68,.6)'}}, y:{ticks:{color:'#64748B',font:{size:10}},grid:{color:'rgba(28,42,68,.6)'}} } }
+    });
+  </script>
+</body>
+</html>

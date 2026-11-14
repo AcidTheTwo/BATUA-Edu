@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Leaderboard &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-main"><div class="container" id="page"></div></main>
+  <script>
+    function getUser(){try{return JSON.parse(localStorage.getItem('batua_user')||'null')}catch(e){return null}}
+    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+    function money(n,d){return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})}
+    function pct(n){return (Number(n||0)>=0?'+':'')+Number(n||0).toFixed(2)+'%'}
+    function plCls(n){return Number(n||0)>=0?'text-gain':'text-loss'}
+    var NAV=[['dashboard.html','Dashboard'],['markets.html','Markets'],['portfolio.html','My Portfolio'],['wallet.html','Wallet'],['transactions.html','Transactions'],['transfers.html','P2P Transfers'],['lending.html','Lending & Borrowing'],['leaderboard.html','Leaderboard'],['profile.html','Profile']];
+function shell(active){
+  var u=getUser();
+  if(!u){location.href='login.html';return null}
+  var links=NAV.slice();
+  if(u.role==='admin')links.push(['admin.html','Admin Panel']);
+  var sb='<aside id="sb" class="sidebar"><div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div><nav class="sidebar-nav">'+links.map(function(l){return '<a href="'+l[0]+'" class="nav-link'+(l[0]===active?' active':'')+'">'+l[1]+'</a>'}).join('')+'<a href="login.html" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a></nav></aside>';
+  var tb='<header class="topbar"><div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button><span class="badge-mock">MOCK PREVIEW</span></div><div class="topbar-right"><div class="user-meta"><p class="user-meta-name">'+esc(u.full_name)+'</p><p class="user-meta-sub">@'+esc(u.username)+' &middot; '+esc(u.role)+'</p></div><div class="avatar">'+esc((u.full_name||'U')[0].toUpperCase())+'</div></div></header>';
+  document.body.insertAdjacentHTML('afterbegin',sb+tb);
+  return u;
+}
+    var me=shell('leaderboard.html');
+    var SK='batua_state_v1';var st=null;try{st=JSON.parse(localStorage.getItem(SK))}catch(e){}
+    var board=[{username:'meera',wallet:4210.4,hold:5609.6},{username:'admin',wallet:10000,hold:0},{username:me.username,wallet:st?st.balance:6492.6,hold:st?st.holdings.reduce(function(t,x){return t+x.qty*x.price},0):3466.9},{username:'rohan',wallet:7120.75,hold:2561.25},{username:'sneha',wallet:3260.1,hold:5639.9}];
+    board=board.map(function(r){var nw=r.wallet+r.hold;return {username:r.username,wallet:r.wallet,hold:r.hold,net:nw,profit:nw-10000,ret:(nw-10000)/100}}).sort(function(a,b){return b.net-a.net}).map(function(r,i){r.rank=i+1;return r});
+    var mine=board.find(function(r){return r.username===me.username})||board[2];
+    function medal(r){return r<=3?'medal medal-'+r:'medal'}
+    document.getElementById('page').innerHTML='<div class="page-header"><h1 class="page-title">Global Leaderboard</h1><p class="page-subtitle">Ranked by net worth = wallet + holdings &minus; loans. Profit measured against the 10,000 TUA bonus.</p></div><div class="card card-sky-border p-5 mb-4 flex flex-wrap items-center gap-6"><div><p class="stat-label">Your rank</p><p class="text-3xl font-extrabold text-sky">#'+mine.rank+'</p></div><div><p class="stat-label">Net worth</p><p class="text-lg font-bold text-white">'+money(mine.net)+' TUA</p></div><div><p class="stat-label">Total profit</p><p class="text-lg font-bold '+plCls(mine.profit)+'">'+(mine.profit>=0?'+':'')+money(mine.profit)+' TUA</p></div><div><p class="stat-label">Returns</p><p class="text-lg font-bold '+plCls(mine.ret)+'">'+pct(mine.ret)+'</p></div></div><div class="card table-wrap"><table class="min-w-760"><thead><tr><th class="th">Rank</th><th class="th">Trader</th><th class="th text-right">Portfolio Value</th><th class="th text-right">Wallet Balance</th><th class="th text-right">Total Profit</th><th class="th text-right">Returns</th></tr></thead><tbody>'+board.map(function(r){return '<tr class="'+(r.username===me.username?'row-highlight':'')+'"><td class="td"><span class="'+medal(r.rank)+'">'+r.rank+'</span></td><td class="td"><span class="font-semibold text-white">@'+esc(r.username)+'</span>'+(r.username===me.username?' <span class="ml-2 text-10 text-sky font-bold">YOU</span>':'')+'</td><td class="td text-right">'+money(r.hold)+'</td><td class="td text-right">'+money(r.wallet)+'</td><td class="td text-right font-semibold '+plCls(r.profit)+'">'+(r.profit>=0?'+':'')+money(r.profit)+'</td><td class="td text-right font-semibold '+plCls(r.ret)+'">'+pct(r.ret)+'</td></tr>'}).join('')+'</tbody></table></div>';
+  </script>
+</body>
+</html>

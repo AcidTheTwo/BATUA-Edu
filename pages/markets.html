@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markets &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">B</div>
+      <span class="brand-text">BATUA<span>-Edu</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="markets.html" class="nav-link active">Markets</a>
+      <a href="portfolio.html" class="nav-link">My Portfolio</a>
+      <a href="wallet.html" class="nav-link">Wallet</a>
+      <a href="transactions.html" class="nav-link">Transactions</a>
+      <a href="transfers.html" class="nav-link">P2P Transfers</a>
+      <a href="lending.html" class="nav-link">Lending &amp; Borrowing</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+      <a href="profile.html" class="nav-link">Profile</a>
+      <a href="login.html" onclick="localStorage.removeItem('batua_user')" class="nav-link">Logout</a>
+    </nav>
+  </aside>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
+      <span class="badge-mock">MOCK PREVIEW</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-meta">
+        <p class="user-meta-name" id="user-name">Loading...</p>
+        <p class="user-meta-sub" id="user-role">user</p>
+      </div>
+      <div class="avatar" id="user-avatar">U</div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="container">
+      <div class="page-header-row">
+        <div>
+          <h1 class="page-title">Markets</h1>
+          <p class="page-subtitle">Stocks &amp; crypto &middot; prices refresh automatically.</p>
+        </div>
+        <span class="badge-mock">SIMULATED DATA</span>
+      </div>
+
+      <div class="card p-4 grid md-grid-4 gap-3 mb-4">
+        <input id="f-search" class="input" placeholder="Search name or ticker...">
+        <select id="f-type" class="input">
+          <option value="">All types</option>
+          <option value="STOCK">Stocks</option>
+          <option value="CRYPTO">Crypto</option>
+        </select>
+        <select id="f-risk" class="input">
+          <option value="">All risk levels</option>
+          <option value="LOW">Low</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="HIGH">High</option>
+        </select>
+        <select id="f-sort" class="input">
+          <option value="name">Sort: Name</option>
+          <option value="gainers">Biggest gainers</option>
+          <option value="losers">Biggest losers</option>
+          <option value="price_desc">Price: high &rarr; low</option>
+          <option value="price_asc">Price: low &rarr; high</option>
+        </select>
+      </div>
+
+      <div class="card table-wrap">
+        <table class="min-w-760">
+          <thead>
+            <tr>
+              <th class="th">Asset</th>
+              <th class="th">Type</th>
+              <th class="th text-right">Price</th>
+              <th class="th text-right">24h Change</th>
+              <th class="th">Risk</th>
+              <th class="th text-right">Trade</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div id="trade-modal" class="modal-backdrop">
+    <div class="card modal-box p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-white" id="modal-title">Trade</h3>
+        <button onclick="closeModal()" class="modal-close">&times;</button>
+      </div>
+      <div class="grid grid-2 gap-2 mb-4">
+        <button id="btn-buy" class="btn btn-gain btn-full">Buy</button>
+        <button id="btn-sell" class="btn btn-ghost btn-full">Sell</button>
+      </div>
+      <div id="modal-body"></div>
+      <p class="text-10 text-slate-600 mt-4">Mock preview &mdash; no real database. In the full project, this executes a MySQL transaction.</p>
+    </div>
+  </div>
+
+  <script>
+    let user = JSON.parse(localStorage.getItem('batua_user') || 'null');
+    if (!user) { window.location.href = 'login.html'; }
+    else {
+      document.getElementById('user-name').textContent = user.full_name || user.username;
+      document.getElementById('user-role').textContent = '@' + (user.username || 'user') + ' · ' + (user.role || 'user');
+      document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'U')[0].toUpperCase();
+    }
+
+    const ASSETS = [
+      { asset_id: 1, symbol: 'BTC', name: 'Bitcoin', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 67250, change_24h: 2.34 },
+      { asset_id: 2, symbol: 'ETH', name: 'Ethereum', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 3480, change_24h: -1.12 },
+      { asset_id: 3, symbol: 'SOL', name: 'Solana', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 172.4, change_24h: 5.61 },
+      { asset_id: 4, symbol: 'BNB', name: 'BNB Chain', asset_type: 'CRYPTO', risk_level: 'MEDIUM', current_price: 585, change_24h: 0.84 },
+      { asset_id: 5, symbol: 'XRP', name: 'XRP', asset_type: 'CRYPTO', risk_level: 'MEDIUM', current_price: 0.62, change_24h: -3.2 },
+      { asset_id: 6, symbol: 'ADA', name: 'Cardano', asset_type: 'CRYPTO', risk_level: 'MEDIUM', current_price: 0.45, change_24h: 1.45 },
+      { asset_id: 7, symbol: 'DOGE', name: 'Dogecoin', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 0.138, change_24h: -6.8 },
+      { asset_id: 8, symbol: 'RELIANCE', name: 'Reliance Industries', asset_type: 'STOCK', risk_level: 'LOW', current_price: 2915, change_24h: 0.42 },
+      { asset_id: 9, symbol: 'TCS', name: 'Tata Consultancy Services', asset_type: 'STOCK', risk_level: 'LOW', current_price: 4120, change_24h: 1.9 },
+      { asset_id: 10, symbol: 'INFY', name: 'Infosys', asset_type: 'STOCK', risk_level: 'LOW', current_price: 1585, change_24h: -0.65 },
+      { asset_id: 11, symbol: 'HDFCBANK', name: 'HDFC Bank', asset_type: 'STOCK', risk_level: 'LOW', current_price: 1490, change_24h: 0.31 },
+      { asset_id: 12, symbol: 'AAPL', name: 'Apple Inc.', asset_type: 'STOCK', risk_level: 'MEDIUM', current_price: 228.5, change_24h: 2.75 },
+      { asset_id: 13, symbol: 'MSFT', name: 'Microsoft Corp.', asset_type: 'STOCK', risk_level: 'LOW', current_price: 415.2, change_24h: 0.98 },
+      { asset_id: 14, symbol: 'GOOGL', name: 'Alphabet Inc.', asset_type: 'STOCK', risk_level: 'MEDIUM', current_price: 178.3, change_24h: -1.85 },
+      { asset_id: 15, symbol: 'TSLA', name: 'Tesla Inc.', asset_type: 'STOCK', risk_level: 'HIGH', current_price: 242.7, change_24h: 4.2 },
+      { asset_id: 16, symbol: 'NVDA', name: 'NVIDIA Corp.', asset_type: 'STOCK', risk_level: 'HIGH', current_price: 131.6, change_24h: -2.4 }
+    ];
+
+    let list = [...ASSETS];
+    function money(n, d = 2) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function pct(n) { return (Number(n || 0) >= 0 ? '+' : '') + Number(n || 0).toFixed(2) + '%'; }
+    function plCls(n) { return Number(n || 0) >= 0 ? 'text-gain' : 'text-loss'; }
+
+    function render() {
+      const tbody = document.getElementById('rows');
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="td text-center text-slate-500">No assets match your filters.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(a => {
+        const riskClass = a.risk_level === 'LOW' ? 'risk-low' : a.risk_level === 'MEDIUM' ? 'risk-medium' : 'risk-high';
+        const typeClass = a.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock';
+        return `
+          <tr>
+            <td class="td">
+              <a href="asset.html?id=${a.asset_id}" class="font-semibold text-white">${a.symbol}</a>
+              <p class="text-11 text-slate-500">${a.name}</p>
+            </td>
+            <td class="td"><span class="badge ${typeClass}">${a.asset_type}</span></td>
+            <td class="td text-right font-medium">${money(a.current_price)} TUA</td>
+            <td class="td text-right font-semibold ${plCls(a.change_24h)}">${pct(a.change_24h)}</td>
+            <td class="td"><span class="badge ${riskClass}">${a.risk_level}</span></td>
+            <td class="td text-right whitespace-nowrap">
+              <button class="btn btn-gain btn-sm mr-2" onclick="openTrade(${a.asset_id}, 'BUY')">Buy</button>
+              <button class="btn btn-loss btn-sm" onclick="openTrade(${a.asset_id}, 'SELL')">Sell</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function applyFilters() {
+      const s = document.getElementById('f-search').value.toLowerCase();
+      const t = document.getElementById('f-type').value;
+      const r = document.getElementById('f-risk').value;
+      const sort = document.getElementById('f-sort').value;
+
+      list = ASSETS.filter(a =>
+        (!s || a.symbol.toLowerCase().includes(s) || a.name.toLowerCase().includes(s)) &&
+        (!t || a.asset_type === t) &&
+        (!r || a.risk_level === r)
+      );
+
+      if (sort === 'gainers') list.sort((a,b) => b.change_24h - a.change_24h);
+      else if (sort === 'losers') list.sort((a,b) => a.change_24h - b.change_24h);
+      else if (sort === 'price_desc') list.sort((a,b) => b.current_price - a.current_price);
+      else if (sort === 'price_asc') list.sort((a,b) => a.current_price - b.current_price);
+      else if (sort === 'name') list.sort((a,b) => a.name.localeCompare(b.name));
+
+      render();
+    }
+
+    document.getElementById('f-search').addEventListener('input', applyFilters);
+    document.getElementById('f-type').addEventListener('change', applyFilters);
+    document.getElementById('f-risk').addEventListener('change', applyFilters);
+    document.getElementById('f-sort').addEventListener('change', applyFilters);
+
+    let currentAsset = null;
+    let tradeMode = 'BUY';
+
+    function openTrade(assetId, mode) {
+      currentAsset = ASSETS.find(a => a.asset_id === assetId);
+      tradeMode = mode;
+      document.getElementById('trade-modal').classList.add('open');
+      updateModal();
+    }
+
+    function closeModal() {
+      document.getElementById('trade-modal').classList.remove('open');
+    }
+
+    function updateModal() {
+      document.getElementById('modal-title').innerHTML = `Trade ${currentAsset.symbol} <span class="text-slate-500 text-xs font-normal">@ ${money(currentAsset.current_price)} TUA</span>`;
+      document.getElementById('btn-buy').className = tradeMode === 'BUY' ? 'btn btn-gain btn-full' : 'btn btn-ghost btn-full';
+      document.getElementById('btn-sell').className = tradeMode === 'SELL' ? 'btn btn-loss btn-full' : 'btn btn-ghost btn-full';
+
+      const body = document.getElementById('modal-body');
+      if (tradeMode === 'BUY') {
+        body.innerHTML = `
+          <label class="text-xs text-slate-400">Invest amount (TUA)</label>
+          <input id="trade-amount" class="input mt-1" type="number" min="1" step="any" placeholder="e.g. 500">
+          <div class="sub-box text-xs mt-3 flex justify-between">
+            <span class="text-slate-500">Estimated qty (Amount &divide; Price)</span>
+            <span class="font-semibold text-white" id="trade-est">&mdash;</span>
+          </div>
+          <button class="btn btn-gain btn-full mt-4" onclick="executeTrade()">Buy ${currentAsset.symbol}</button>
+        `;
+        document.getElementById('trade-amount').oninput = function() {
+          const amt = Number(this.value);
+          document.getElementById('trade-est').textContent = amt > 0 ? (amt / currentAsset.current_price).toFixed(8) + ' ' + currentAsset.symbol : '—';
+        };
+      } else {
+        body.innerHTML = `
+          <label class="text-xs text-slate-400">Quantity to sell</label>
+          <input id="trade-qty" class="input mt-1" type="number" min="0" step="any" placeholder="e.g. 0.25">
+          <div class="sub-box text-xs mt-3 flex justify-between">
+            <span class="text-slate-500">Estimated proceeds</span>
+            <span class="font-semibold text-white" id="trade-est">&mdash;</span>
+          </div>
+          <button class="btn btn-loss btn-full mt-4" onclick="executeTrade()">Sell ${currentAsset.symbol}</button>
+        `;
+        document.getElementById('trade-qty').oninput = function() {
+          const qty = Number(this.value);
+          document.getElementById('trade-est').textContent = qty > 0 ? money(qty * currentAsset.current_price) + ' TUA' : '—';
+        };
+      }
+    }
+
+    document.getElementById('btn-buy').onclick = function() { tradeMode = 'BUY'; updateModal(); };
+    document.getElementById('btn-sell').onclick = function() { tradeMode = 'SELL'; updateModal(); };
+
+    function executeTrade() {
+      if (tradeMode === 'BUY') {
+        const amt = Number(document.getElementById('trade-amount').value);
+        if (amt <= 0) { alert('Enter a valid amount'); return; }
+        const qty = (amt / currentAsset.current_price).toFixed(8);
+        alert(`Buy executed: ${qty} ${currentAsset.symbol} @ ${currentAsset.current_price} TUA. (mock preview)`);
+      } else {
+        const qty = Number(document.getElementById('trade-qty').value);
+        if (qty <= 0) { alert('Enter a valid quantity'); return; }
+        const proceeds = (qty * currentAsset.current_price).toFixed(2);
+        alert(`Sell executed: ${qty} ${currentAsset.symbol} for ${proceeds} TUA. (mock preview)`);
+      }
+      closeModal();
+    }
+
+    render();
+  </script>
+</body>
+</html>

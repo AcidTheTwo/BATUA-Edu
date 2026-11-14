@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Admin Panel &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-main"><div class="container" id="page"></div></main>
+  <div id="modal" class="modal-backdrop">
+    <div class="card modal-box p-5 space-y-3">
+      <h3 class="font-bold text-white" id="mtitle">List New Asset</h3>
+      <input id="msym" class="input" placeholder="Symbol (e.g. LINK)">
+      <input id="mname" class="input" placeholder="Name">
+      <input id="mprice" class="input" type="number" step="any" placeholder="Listing price (TUA)">
+      <div class="grid grid-2 gap-3">
+        <select id="mtype" class="input"><option value="STOCK">STOCK</option><option value="CRYPTO">CRYPTO</option></select>
+        <select id="mrisk" class="input"><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option></select>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button class="btn btn-primary flex-1" onclick="saveAsset()">Save</button>
+        <button class="btn btn-ghost flex-1" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    function getUser(){try{return JSON.parse(localStorage.getItem('batua_user')||'null')}catch(e){return null}}
+    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+    function money(n,d){return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})}
+    function dtF(s){return new Date(s).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+    function toast(m,t){
+  var b=document.getElementById('toasts');
+  if(!b){b=document.createElement('div');b.id='toasts';b.className='toast-container';document.body.appendChild(b)}
+  var e=document.createElement('div');
+  e.className='card toast '+(t==='success'?'toast-success':'toast-error');
+  e.textContent=m;
+  b.appendChild(e);
+  setTimeout(function(){e.remove()},4000);
+}
+    var NAV=[['dashboard.html','Dashboard'],['markets.html','Markets'],['portfolio.html','My Portfolio'],['wallet.html','Wallet'],['transactions.html','Transactions'],['transfers.html','P2P Transfers'],['lending.html','Lending & Borrowing'],['leaderboard.html','Leaderboard'],['profile.html','Profile']];
+function shell(active){
+  var u=getUser();
+  if(!u){location.href='login.html';return null}
+  var links=NAV.slice();
+  if(u.role==='admin')links.push(['admin.html','Admin Panel']);
+  var sb='<aside id="sb" class="sidebar"><div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div><nav class="sidebar-nav">'+links.map(function(l){return '<a href="'+l[0]+'" class="nav-link'+(l[0]===active?' active':'')+'">'+l[1]+'</a>'}).join('')+'<a href="login.html" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a></nav></aside>';
+  var tb='<header class="topbar"><div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button><span class="badge-mock">MOCK PREVIEW</span></div><div class="topbar-right"><div class="user-meta"><p class="user-meta-name">'+esc(u.full_name)+'</p><p class="user-meta-sub">@'+esc(u.username)+' &middot; '+esc(u.role)+'</p></div><div class="avatar">'+esc((u.full_name||'U')[0].toUpperCase())+'</div></div></header>';
+  document.body.insertAdjacentHTML('afterbegin',sb+tb);
+  return u;
+}
+    var u=shell('admin.html');
+    if(u&&u.role!=='admin'){location.href='dashboard.html'}
+    var USERS=[{id:1,username:'admin',full_name:'BATUA Admin',email:'admin@batua.edu',role:'admin',balance:10000},{id:2,username:'aarav',full_name:'Aarav Sharma',email:'aarav@demo.batua.edu',role:'user',balance:6492.6},{id:3,username:'meera',full_name:'Meera Iyer',email:'meera@demo.batua.edu',role:'user',balance:4210.4},{id:4,username:'rohan',full_name:'Rohan Gupta',email:'rohan@demo.batua.edu',role:'user',balance:7120.75},{id:5,username:'sneha',full_name:'Sneha Patil',email:'sneha@demo.batua.edu',role:'user',balance:3260.1}];
+    var ASSETS=[{id:1,symbol:'BTC',name:'Bitcoin',type:'CRYPTO',risk:'HIGH',price:67250,chg:2.34,holders:4,active:true},{id:2,symbol:'ETH',name:'Ethereum',type:'CRYPTO',risk:'HIGH',price:3480,chg:-1.12,holders:6,active:true},{id:3,symbol:'SOL',name:'Solana',type:'CRYPTO',risk:'HIGH',price:172.4,chg:5.61,holders:9,active:true},{id:9,symbol:'TCS',name:'Tata Consultancy Services',type:'STOCK',risk:'LOW',price:4120,chg:1.9,holders:10,active:true},{id:12,symbol:'AAPL',name:'Apple Inc.',type:'STOCK',risk:'MEDIUM',price:228.5,chg:2.75,holders:7,active:true},{id:15,symbol:'TSLA',name:'Tesla Inc.',type:'STOCK',risk:'HIGH',price:242.7,chg:4.2,holders:9,active:true},{id:16,symbol:'NVDA',name:'NVIDIA Corp.',type:'STOCK',risk:'HIGH',price:131.6,chg:-2.4,holders:8,active:true}];
+    var LOGS=[{id:3,action:'ASSET_UPDATED',details:'asset_id=7 risk=HIGH',date:Date.now()-864e5},{id:2,action:'BALANCE_AUDIT',details:'CONSISTENT',date:Date.now()-2*864e5},{id:1,action:'ASSET_LISTED',details:'NVDA @ 131.6',date:Date.now()-4*864e5}];
+    var tab='users',editId=null;
+    var TABS=[['users','Users'],['assets','Assets'],['txns','Transactions'],['lending','Lending'],['logs','System Logs'],['audit','Balance Audit']];
+    document.getElementById('page').innerHTML='<div class="page-header"><h1 class="page-title">Admin Panel</h1><p class="page-subtitle">Role-restricted &middot; every action is written to Admin_Logs.</p></div><div id="tabs" class="flex flex-wrap gap-2 mb-4"></div><div id="body"></div>';
+    function chips(){document.getElementById('tabs').innerHTML=TABS.map(function(t){return '<button class="chip'+(t[0]===tab?' on':'')+'" onclick="setTab(\''+t[0]+'\')">'+t[1]+'</button>'}).join('')}
+    function setTab(t){tab=t;chips();render()}
+    function riskBadge(r){var c=r==='LOW'?'risk-low':r==='MEDIUM'?'risk-medium':'risk-high';return '<span class="badge '+c+'">'+r+'</span>'}
+    function typeBadge(t){var c=t==='CRYPTO'?'type-crypto':'type-stock';return '<span class="badge '+c+'">'+t+'</span>'}
+    function render(){
+      var b=document.getElementById('body');
+      if(tab==='users'){b.innerHTML='<div class="card table-wrap"><table class="min-w-760"><thead><tr><th class="th">ID</th><th class="th">Username</th><th class="th">Name</th><th class="th">Email</th><th class="th">Role</th><th class="th text-right">Balance</th></tr></thead><tbody>'+USERS.map(function(x){return '<tr><td class="td text-slate-500">#'+x.id+'</td><td class="td font-semibold text-white">@'+esc(x.username)+'</td><td class="td">'+esc(x.full_name)+'</td><td class="td text-slate-400">'+esc(x.email)+'</td><td class="td">'+(x.role==='admin'?'<span class="text-sky font-bold text-xs">ADMIN</span>':'user')+'</td><td class="td text-right">'+money(x.balance)+'</td></tr>'}).join('')+'</tbody></table></div>'}
+      if(tab==='assets'){b.innerHTML='<button class="btn btn-primary mb-4" onclick="openModal()">+ List New Asset</button><div class="card table-wrap"><table class="min-w-860"><thead><tr><th class="th">Symbol</th><th class="th">Type</th><th class="th">Risk</th><th class="th text-right">Price</th><th class="th text-right">24h</th><th class="th text-right">Holders</th><th class="th">Status</th><th class="th text-right">Actions</th></tr></thead><tbody>'+ASSETS.map(function(a){return '<tr><td class="td font-semibold text-white">'+esc(a.symbol)+'<p class="text-11 text-slate-500 font-normal">'+esc(a.name)+'</p></td><td class="td">'+typeBadge(a.type)+'</td><td class="td">'+riskBadge(a.risk)+'</td><td class="td text-right">'+money(a.price)+'</td><td class="td text-right">'+a.chg.toFixed(2)+'%</td><td class="td text-right">'+a.holders+'</td><td class="td">'+(a.active?'<span class="text-gain text-xs font-bold">ACTIVE</span>':'<span class="text-loss text-xs font-bold">DELISTED</span>')+'</td><td class="td text-right whitespace-nowrap"><button class="btn btn-ghost btn-sm mr-2" onclick="openModal('+a.id+')">Edit</button><button class="btn btn-loss btn-sm" onclick="delist('+a.id+')">'+(a.active?'Delist':'Relist')+'</button></td></tr>'}).join('')+'</tbody></table></div>'}
+      if(tab==='txns'){b.innerHTML='<div class="card table-wrap"><table class="min-w-860"><thead><tr><th class="th">ID</th><th class="th">User</th><th class="th">Asset</th><th class="th">Type</th><th class="th text-right">Qty</th><th class="th text-right">Amount</th><th class="th">When</th></tr></thead><tbody><tr><td class="td text-slate-500">#12</td><td class="td">@aarav</td><td class="td font-semibold text-white">SOL</td><td class="td"><span class="text-gain font-bold text-xs">BUY</span></td><td class="td text-right">6</td><td class="td text-right">950.40</td><td class="td text-xs text-slate-500">'+dtF(Date.now()-2*864e5)+'</td></tr><tr><td class="td text-slate-500">#11</td><td class="td">@meera</td><td class="td font-semibold text-white">DOGE</td><td class="td"><span class="text-loss font-bold text-xs">SELL</span></td><td class="td text-right">1200</td><td class="td text-right">165.60</td><td class="td text-xs text-slate-500">'+dtF(Date.now()-3*864e5)+'</td></tr><tr><td class="td text-slate-500">#9</td><td class="td">@aarav</td><td class="td font-semibold text-white">TCS</td><td class="td"><span class="text-gain font-bold text-xs">BUY</span></td><td class="td text-right">0.5</td><td class="td text-right">2,005.00</td><td class="td text-xs text-slate-500">'+dtF(Date.now()-7*864e5)+'</td></tr></tbody></table></div>'}
+      if(tab==='lending'){b.innerHTML='<div class="grid sm-grid-3 gap-4"><div class="card p-5"><p class="stat-label">Pool Liquidity</p><p class="stat-value">24,300.00 TUA</p></div><div class="card p-5"><p class="stat-label">Total Lent</p><p class="stat-value">1,200.00 TUA</p></div><div class="card p-5"><p class="stat-label">Total Borrowed</p><p class="stat-value">500.00 TUA</p></div></div><div class="grid lg-grid-2 gap-4 mt-4"><div class="card p-5"><h3 class="font-semibold mb-3">Lending Records</h3><div class="flex justify-between text-sm"><span>@aarav &middot; 200.00 TUA @ 6%</span><span class="text-amber text-xs font-bold">ACTIVE</span></div></div><div class="card p-5"><h3 class="font-semibold mb-3">Loans</h3><div class="flex justify-between text-sm"><span>@aarav &middot; 300.00 TUA @ 12%</span><span class="text-amber text-xs font-bold">OPEN</span></div></div></div>'}
+      if(tab==='logs'){b.innerHTML='<div class="card table-wrap"><table class="min-w-640"><thead><tr><th class="th">ID</th><th class="th">Admin</th><th class="th">Action</th><th class="th">Details</th><th class="th">When</th></tr></thead><tbody>'+LOGS.map(function(l){return '<tr><td class="td text-slate-500">#'+l.id+'</td><td class="td">@admin</td><td class="td font-semibold text-white text-xs">'+l.action+'</td><td class="td text-slate-400">'+esc(l.details)+'</td><td class="td text-xs text-slate-500">'+dtF(l.date)+'</td></tr>'}).join('')+'</tbody></table></div>'}
+      if(tab==='audit'){b.innerHTML='<div class="card card-gain-border p-5 flex items-center justify-between"><div><p class="text-sm font-bold text-white">Wallet Integrity Check</p><p class="text-xs text-slate-500 mt-1">&Sigma; Wallets.balance vs &Sigma; Wallet_History.amount</p></div><div class="text-right"><p class="text-xl font-extrabold text-gain">&check; CONSISTENT</p><p class="text-xs text-slate-500">wallets 41,083.85 &middot; ledger 41,083.85</p></div></div><div class="grid sm-grid-2 xl-grid-4 gap-4 mt-4"><div class="card p-5"><p class="stat-label">Holdings Value</p><p class="text-xl font-bold text-white mt-1-5">19,430.65 TUA</p></div><div class="card p-5"><p class="stat-label">Open Loans</p><p class="text-xl font-bold text-white mt-1-5">300.00 TUA</p></div><div class="card p-5"><p class="stat-label">Active Lends</p><p class="text-xl font-bold text-white mt-1-5">200.00 TUA</p></div><div class="card p-5"><p class="stat-label">Pool Liquidity</p><p class="text-xl font-bold text-white mt-1-5">24,300.00 TUA</p></div></div><p class="text-xs text-slate-500 mt-4">5 users &middot; 128 trades &middot; audit logged to Admin_Logs.</p><button class="btn btn-ghost mt-3" onclick="toast(\'Audit re-run: CONSISTENT\',\'success\')">Re-run audit</button>'}
+    }
+    function openModal(id){editId=id||null;var a=id?ASSETS.find(function(x){return x.id===id}):null;document.getElementById('mtitle').textContent=a?'Edit '+a.symbol:'List New Asset';document.getElementById('msym').value=a?a.symbol:'';document.getElementById('msym').disabled=!!a;document.getElementById('mname').value=a?a.name:'';document.getElementById('mprice').value=a?a.price:'';document.getElementById('mtype').value=a?a.type:'STOCK';document.getElementById('mrisk').value=a?a.risk:'MEDIUM';document.getElementById('modal').classList.add('open')}
+    function closeModal(){document.getElementById('modal').classList.remove('open')}
+    function saveAsset(){var sym=document.getElementById('msym').value.trim().toUpperCase();var name=document.getElementById('mname').value.trim();var price=Number(document.getElementById('mprice').value);var type=document.getElementById('mtype').value;var risk=document.getElementById('mrisk').value;if(!sym||!name||!(price>0))return toast('Fill symbol, name and a valid price.');if(editId){var a=ASSETS.find(function(x){return x.id===editId});a.name=name;a.price=price;a.type=type;a.risk=risk;LOGS.unshift({id:Date.now(),action:'ASSET_UPDATED',details:sym+' risk='+risk,date:Date.now()});toast('Asset updated.','success')}else{ASSETS.push({id:Date.now(),symbol:sym,name:name,type:type,risk:risk,price:price,chg:0,holders:0,active:true});LOGS.unshift({id:Date.now(),action:'ASSET_LISTED',details:sym+' @ '+price,date:Date.now()});toast(sym+' listed successfully.','success')}closeModal();render()}
+    function delist(id){var a=ASSETS.find(function(x){return x.id===id});a.active=!a.active;LOGS.unshift({id:Date.now(),action:a.active?'ASSET_RELISTED':'ASSET_DELISTED',details:a.symbol,date:Date.now()});toast(a.symbol+(a.active?' relisted.':' delisted.'),'success');render()}
+    chips();render();
+  </script>
+</body>
+</html>
