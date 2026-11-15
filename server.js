@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const WebSocket = require('ws');
+const bcrypt = require('bcryptjs');
 const pool = require('./db');
 
 const app = express();
@@ -30,10 +31,19 @@ function toFinnhubSymbol(symbol, assetType) {
   return assetType === 'CRYPTO' ? `BINANCE:${symbol.toUpperCase()}USDT` : symbol.toUpperCase();
 }
 
+// Safely broadcast live Finnhub ticks to all connected SSE clients
 function broadcastLiveTick(payload) {
-  const msg = `data: ${JSON.stringify(payload)}\n\n`;
-  for (const res of sseClients) {
-    res.write(msg);
+  const data = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const client of sseClients) {
+    if (client.writableEnded) {
+      sseClients.delete(client);
+      continue;
+    }
+    try {
+      client.write(data);
+    } catch (err) {
+      sseClients.delete(client);
+    }
   }
 }
 
@@ -176,7 +186,6 @@ async function syncSnapshotsToDb(apiKey) {
       'SELECT asset_id, symbol, name, asset_type, current_price, price_change, risk FROM assets WHERE is_active = 1'
     );
 
-    // Detect any newly added assets in MySQL and bootstrap + subscribe them live
     for (const row of activeRows) {
       if (!liveState[row.symbol]) {
         await bootstrapAssetFromRest(row, apiKey);
@@ -208,191 +217,6 @@ async function syncSnapshotsToDb(apiKey) {
     console.error('Snapshot DB sync error:', err.message);
   }
 }
-
-// API: Server-Sent Events stream for real-time WebSocket ticks on frontend charts & tables
-app.get('/api/stream', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  sseClients.add(res);
-  req.on('close', () => sseClients.delete(res));
-});
-
-// API: Get all active assets (blends live in-memory WebSocket prices with MySQL metadata)
-app.get('/api/assets', async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      'SELECT asset_id, symbol, name, asset_type, current_price, price_change, risk FROM assets WHERE is_active = 1 ORDER BY asset_id ASC'
-    );
-
-    const enriched = rows.map((r) => {
-      const live = liveState[r.symbol];
-      return {
-        ...r,
-        current_price: live && live.price > 0 ? live.price : Number(r.current_price),
-        price_change: live ? Number(live.changePct.toFixed(4)) : Number(r.price_change),
-        risk: live ? live.risk : r.risk
-      };
-    });
-
-    res.json(enriched);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// API: Get last 60 BTC price points (~30 minutes at 30s intervals) for landing page hero chart
-app.get('/api/hero-history', async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      `SELECT h.price, h.timestamp
-       FROM asset_price_history h
-       JOIN assets a ON h.asset_id = a.asset_id
-       WHERE a.symbol = 'BTC'
-       ORDER BY h.timestamp DESC
-       LIMIT 60`
-    );
-
-    const ordered = rows.reverse();
-    res.json({
-      labels: ordered.map((r) =>
-        new Date(r.timestamp).toLocaleTimeString('en-IN', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        })
-      ),
-      prices: ordered.map((r) => Number(r.price))
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// API: Get cached historical candles (1D, 1W, 1M, 1Y) from Binance (Crypto) or Yahoo Finance (Stocks)
-app.get('/api/assets/:id/history', async (req, res) => {
-  const range = (req.query.range || '1D').toUpperCase();
-  const validRanges = ['1D', '1W', '1M', '1Y'];
-  const selectedRange = validRanges.includes(range) ? range : '1D';
-
-  try {
-    const [rows] = await pool.query(
-      'SELECT asset_id, symbol, asset_type FROM assets WHERE asset_id = ?',
-      [req.params.id]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: 'Asset not found' });
-
-    const asset = rows[0];
-    const cacheKey = `${asset.symbol}:${selectedRange}`;
-    const now = Date.now();
-
-    if (candleCache[cacheKey] && candleCache[cacheKey].expiresAt > now) {
-      return res.json(candleCache[cacheKey].data);
-    }
-
-    let labels = [];
-    let prices = [];
-
-    if (asset.asset_type === 'CRYPTO') {
-      // Binance public klines (no API key needed): 1D = 15m (96 pts), 1W = 1h (168 pts), 1M = 4h (180 pts), 1Y = 1d (365 pts)
-      const map = {
-        '1D': { interval: '15m', limit: 96 },
-        '1W': { interval: '1h', limit: 168 },
-        '1M': { interval: '4h', limit: 180 },
-        '1Y': { interval: '1d', limit: 365 }
-      };
-      const cfg = map[selectedRange];
-      const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(asset.symbol)}USDT&interval=${cfg.interval}&limit=${cfg.limit}`;
-      const r = await fetch(url);
-      const klines = await r.json();
-
-      if (Array.isArray(klines)) {
-        labels = klines.map((k) => {
-          const d = new Date(k[0]);
-          return selectedRange === '1D'
-            ? d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-            : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-        });
-        prices = klines.map((k) => Number(k[4])); // Close price
-      }
-    } else {
-      // Yahoo Finance public chart API (no API key needed): 1D = 5m, 1W = 1h, 1M = 1d, 1Y = 1d
-      const map = {
-        '1D': { range: '1d', interval: '5m' },
-        '1W': { range: '5d', interval: '1h' },
-        '1M': { range: '1mo', interval: '1d' },
-        '1Y': { range: '1y', interval: '1d' }
-      };
-      const cfg = map[selectedRange];
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(asset.symbol)}?range=${cfg.range}&interval=${cfg.interval}`;
-      const r = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-      });
-      const json = await r.json();
-      const result = json?.chart?.result?.[0];
-
-      if (result && Array.isArray(result.timestamp)) {
-        const closes = result.indicators?.quote?.[0]?.close || [];
-        result.timestamp.forEach((ts, idx) => {
-          if (typeof closes[idx] === 'number') {
-            const d = new Date(ts * 1000);
-            labels.push(
-              selectedRange === '1D'
-                ? d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-            );
-            prices.push(Number(closes[idx].toFixed(2)));
-          }
-        });
-      }
-    }
-
-    // Fallback to MySQL recorded ticks if external API returns empty
-    if (prices.length === 0) {
-      const [dbRows] = await pool.query(
-        'SELECT price, timestamp FROM asset_price_history WHERE asset_id = ? ORDER BY timestamp DESC LIMIT 100',
-        [asset.asset_id]
-      );
-      const ordered = dbRows.reverse();
-      labels = ordered.map((d) => new Date(d.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
-      prices = ordered.map((d) => Number(d.price));
-    }
-
-    const payload = { symbol: asset.symbol, range: selectedRange, labels, prices };
-    const ttlMs = selectedRange === '1D' ? 2 * 60 * 1000 : 15 * 60 * 1000;
-    candleCache[cacheKey] = { data: payload, expiresAt: now + ttlMs };
-
-    res.json(payload);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// API: Get live platform statistics for landing page section-band
-app.get('/api/stats', async (req, res) => {
-  try {
-    const [[{ traders }]] = await pool.query('SELECT COUNT(*) AS traders FROM users');
-    const [[{ assets }]] = await pool.query('SELECT COUNT(*) AS assets FROM assets WHERE is_active = 1');
-    const [[{ trades, volume }]] = await pool.query(
-      'SELECT COUNT(*) AS trades, COALESCE(SUM(total_amount), 0) AS volume FROM trade'
-    );
-
-    res.json({
-      traders: Number(traders),
-      assets: Number(assets),
-      trades: Number(trades),
-      volume: Number(volume)
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-const bcrypt = require('bcryptjs');
-
-app.use(express.json());
 
 // Redirect legacy auth pages to unified auth.html
 app.get('/login.html', (req, res) => {
@@ -429,10 +253,9 @@ app.post('/api/auth/register', async (req, res) => {
   let conn;
   try {
     const passwordHash = await bcrypt.hash(password, 10);
-    conn = await pool.getConnection(); // Uses your MySQL pool from db.js
+    conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    // 1. Insert user
     const [userResult] = await conn.execute(
       `INSERT INTO users (username, first_name, middle_name, last_name, email, password_hash, role, account_status)
        VALUES (?, ?, ?, ?, ?, ?, 'USER', 'ACTIVE')`,
@@ -440,7 +263,6 @@ app.post('/api/auth/register', async (req, res) => {
     );
     const userId = userResult.insertId;
 
-    // 2. Provision 1:1 wallet with 10,000.00 initial balance
     const initialBalance = 10000.00;
     const [walletResult] = await conn.execute(
       `INSERT INTO wallets (user_id, currency, balance)
@@ -449,7 +271,6 @@ app.post('/api/auth/register', async (req, res) => {
     );
     const walletId = walletResult.insertId;
 
-    // 3. Log initial DEPOSIT in immutable wallet_history
     await conn.execute(
       `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
        VALUES (?, 'DEPOSIT', ?, ?, 'Welcome bonus')`,
@@ -541,6 +362,231 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// API: Server-Sent Events stream for real-time WebSocket ticks on frontend charts & tables
+app.get('/api/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  sseClients.add(res);
+
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) {
+      res.write(': ping\n\n');
+    }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients.delete(res);
+    if (!res.writableEnded) {
+      res.end();
+    }
+  });
+});
+
+// API: Get all active assets (blends live in-memory WebSocket prices with MySQL metadata)
+app.get('/api/assets', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT asset_id, symbol, name, asset_type, current_price, price_change, risk FROM assets WHERE is_active = 1 ORDER BY asset_id ASC'
+    );
+
+    const enriched = rows.map((r) => {
+      const live = liveState[r.symbol];
+      return {
+        ...r,
+        current_price: live && live.price > 0 ? live.price : Number(r.current_price),
+        price_change: live ? Number(live.changePct.toFixed(4)) : Number(r.price_change),
+        risk: live ? live.risk : r.risk
+      };
+    });
+
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Get 1D BTC chart data from Binance (cached 2m) + live right-edge price so index.html needs no changes
+app.get('/api/hero-history', async (req, res) => {
+  try {
+    const cacheKey = 'BTC:1D';
+    const now = Date.now();
+    let labels = [];
+    let prices = [];
+
+    if (candleCache[cacheKey] && candleCache[cacheKey].expiresAt > now) {
+      labels = [...candleCache[cacheKey].data.labels];
+      prices = [...candleCache[cacheKey].data.prices];
+    } else {
+      const url = 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=60';
+      const r = await fetch(url);
+      const klines = await r.json();
+
+      if (Array.isArray(klines) && klines.length > 0) {
+        labels = klines.map((k) =>
+          new Date(k[0]).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        );
+        prices = klines.map((k) => Number(k[4]));
+
+        candleCache[cacheKey] = {
+          data: { symbol: 'BTC', range: '1D', labels: [...labels], prices: [...prices] },
+          expiresAt: now + 2 * 60 * 1000
+        };
+      }
+    }
+
+    // Fallback to MySQL recorded ticks if Binance is unreachable
+    if (prices.length === 0) {
+      const [rows] = await pool.query(
+        `SELECT h.price, h.timestamp
+         FROM asset_price_history h
+         JOIN assets a ON h.asset_id = a.asset_id
+         WHERE a.symbol = 'BTC'
+         ORDER BY h.timestamp DESC
+         LIMIT 60`
+      );
+      const ordered = rows.reverse();
+      labels = ordered.map((r) =>
+        new Date(r.timestamp).toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+      );
+      prices = ordered.map((r) => Number(r.price));
+    }
+
+    // Append current live Finnhub price as the rightmost tip for /api/stream updates
+    if (liveState.BTC && liveState.BTC.price > 0) {
+      labels.push(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+      prices.push(liveState.BTC.price);
+    }
+
+    res.json({ labels, prices });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Get cached historical candles (1D, 1W, 1M, 1Y) from Binance (Crypto) or Yahoo Finance (Stocks)
+app.get('/api/assets/:id/history', async (req, res) => {
+  const range = (req.query.range || '1D').toUpperCase();
+  const validRanges = ['1D', '1W', '1M', '1Y'];
+  const selectedRange = validRanges.includes(range) ? range : '1D';
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT asset_id, symbol, asset_type FROM assets WHERE asset_id = ?',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Asset not found' });
+
+    const asset = rows[0];
+    const cacheKey = `${asset.symbol}:${selectedRange}`;
+    const now = Date.now();
+
+    if (candleCache[cacheKey] && candleCache[cacheKey].expiresAt > now) {
+      return res.json(candleCache[cacheKey].data);
+    }
+
+    let labels = [];
+    let prices = [];
+
+    if (asset.asset_type === 'CRYPTO') {
+      const map = {
+        '1D': { interval: '15m', limit: 96 },
+        '1W': { interval: '1h', limit: 168 },
+        '1M': { interval: '4h', limit: 180 },
+        '1Y': { interval: '1d', limit: 365 }
+      };
+      const cfg = map[selectedRange];
+      const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(asset.symbol)}USDT&interval=${cfg.interval}&limit=${cfg.limit}`;
+      const r = await fetch(url);
+      const klines = await r.json();
+
+      if (Array.isArray(klines)) {
+        labels = klines.map((k) => {
+          const d = new Date(k[0]);
+          return selectedRange === '1D'
+            ? d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+            : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+        });
+        prices = klines.map((k) => Number(k[4]));
+      }
+    } else {
+      const map = {
+        '1D': { range: '1d', interval: '5m' },
+        '1W': { range: '5d', interval: '1h' },
+        '1M': { range: '1mo', interval: '1d' },
+        '1Y': { range: '1y', interval: '1d' }
+      };
+      const cfg = map[selectedRange];
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(asset.symbol)}?range=${cfg.range}&interval=${cfg.interval}`;
+      const r = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      const json = await r.json();
+      const result = json?.chart?.result?.[0];
+
+      if (result && Array.isArray(result.timestamp)) {
+        const closes = result.indicators?.quote?.[0]?.close || [];
+        result.timestamp.forEach((ts, idx) => {
+          if (typeof closes[idx] === 'number') {
+            const d = new Date(ts * 1000);
+            labels.push(
+              selectedRange === '1D'
+                ? d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+            );
+            prices.push(Number(closes[idx].toFixed(2)));
+          }
+        });
+      }
+    }
+
+    if (prices.length === 0) {
+      const [dbRows] = await pool.query(
+        'SELECT price, timestamp FROM asset_price_history WHERE asset_id = ? ORDER BY timestamp DESC LIMIT 100',
+        [asset.asset_id]
+      );
+      const ordered = dbRows.reverse();
+      labels = ordered.map((d) => new Date(d.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+      prices = ordered.map((d) => Number(d.price));
+    }
+
+    const payload = { symbol: asset.symbol, range: selectedRange, labels, prices };
+    const ttlMs = selectedRange === '1D' ? 2 * 60 * 1000 : 15 * 60 * 1000;
+    candleCache[cacheKey] = { data: payload, expiresAt: now + ttlMs };
+
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Get live platform statistics for landing page section-band
+app.get('/api/stats', async (req, res) => {
+  try {
+    const [[{ traders }]] = await pool.query('SELECT COUNT(*) AS traders FROM users');
+    const [[{ assets }]] = await pool.query('SELECT COUNT(*) AS assets FROM assets WHERE is_active = 1');
+    const [[{ trades, volume }]] = await pool.query(
+      'SELECT COUNT(*) AS trades, COALESCE(SUM(total_amount), 0) AS volume FROM trade'
+    );
+
+    res.json({
+      traders: Number(traders),
+      assets: Number(assets),
+      trades: Number(trades),
+      volume: Number(volume)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);
@@ -565,6 +611,5 @@ app.listen(PORT, async () => {
   await syncSnapshotsToDb(apiKey);
   connectFinnhubWebSocket(apiKey);
 
-  // Persist exact-instant snapshots to MySQL every 30 seconds
   setInterval(() => syncSnapshotsToDb(apiKey), 30000);
 });
