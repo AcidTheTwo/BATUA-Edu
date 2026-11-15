@@ -1148,6 +1148,256 @@ app.post('/api/trades/sell', async (req, res) => {
   }
 });
 
+// API: Single asset details + latest performance snapshot
+// API: Single asset details + latest performance snapshot
+app.get('/api/assets/:id', async (req, res) => {
+  const assetId = Number(req.params.id);
+  if (!assetId) return res.status(400).json({ error: 'Invalid asset ID.' });
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT asset_id, symbol, name, asset_type, current_price, price_change, risk, is_active FROM assets WHERE asset_id = ? LIMIT 1',
+      [assetId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Asset not found.' });
+
+    const row = rows[0];
+    const live = liveState[row.symbol];
+    const price = live && live.price > 0 ? live.price : Number(row.current_price);
+    const changePct = live ? Number(live.changePct.toFixed(4)) : Number(row.price_change);
+
+    const [perfRows] = await pool.query(
+      `SELECT snapshot_date, opening_value, closing_value, day_high, day_low, total_volume
+       FROM asset_performance
+       WHERE asset_id = ?
+       ORDER BY snapshot_date DESC
+       LIMIT 1`,
+      [assetId]
+    );
+
+    res.json({
+      asset_id: row.asset_id,
+      symbol: row.symbol,
+      name: row.name,
+      asset_type: row.asset_type,
+      current_price: price,
+      price_change: changePct,
+      risk: live ? live.risk : row.risk,
+      prev_close: live?.prevClose || price,
+      performance: perfRows[0] || null
+    });
+  } catch (err) {
+    console.error('Asset detail error:', err);
+    res.status(500).json({ error: 'Failed to load asset details.' });
+  }
+});
+
+// API: Verify recipient username for P2P transfers
+app.get('/api/users/verify/:username', async (req, res) => {
+  const clean = (req.params.username || '').trim();
+  const excludeId = Number(req.query.exclude || 0);
+  if (!clean) return res.status(400).json({ error: 'Enter a username.' });
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT user_id, username, first_name, middle_name, last_name, account_status
+       FROM users
+       WHERE username = ?
+       LIMIT 1`,
+      [clean]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: `User "@${clean}" not found.` });
+    }
+    const u = rows[0];
+    if (excludeId && Number(u.user_id) === excludeId) {
+      return res.status(400).json({ error: 'You cannot transfer assets to yourself.' });
+    }
+    if (u.account_status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Recipient account is not active.' });
+    }
+
+    const fullName = [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' ');
+    res.json({ user_id: u.user_id, username: u.username, full_name: fullName });
+  } catch (err) {
+    console.error('Verify user error:', err);
+    res.status(500).json({ error: 'Verification failed.' });
+  }
+});
+
+// API: List P2P asset transfers for a user
+app.get('/api/transfers/asset/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT t.trade_id, t.buyer_user_id, t.seller_user_id,
+              t.buyer_asset_fraction AS qty, t.unit_price, t.total_amount, t.timestamp,
+              a.symbol, a.name AS asset_name,
+              bu.username AS to_username, su.username AS from_username
+       FROM trade t
+       JOIN assets a ON t.buyer_asset_id = a.asset_id
+       JOIN users bu ON t.buyer_user_id = bu.user_id
+       JOIN users su ON t.seller_user_id = su.user_id
+       WHERE t.buyer_user_id IS NOT NULL
+         AND t.seller_user_id IS NOT NULL
+         AND t.buyer_user_id <> t.seller_user_id
+         AND (t.buyer_user_id = ? OR t.seller_user_id = ?)
+         AND t.trade_status = 'COMPLETED'
+       ORDER BY t.timestamp DESC
+       LIMIT 20`,
+      [userId, userId]
+    );
+
+    const formatted = rows.map((r) => {
+      const isOut = Number(r.seller_user_id) === userId;
+      return {
+        trade_id: r.trade_id,
+        dir: isOut ? 'OUT' : 'IN',
+        symbol: r.symbol,
+        asset_name: r.asset_name,
+        qty: Number(r.qty),
+        unit_price: Number(r.unit_price),
+        total_amount: Number(r.total_amount),
+        counterparty: isOut ? r.to_username : r.from_username,
+        timestamp: r.timestamp
+      };
+    });
+
+    res.json(formatted);
+  } catch (err) {
+    console.error('Asset transfer history error:', err);
+    res.status(500).json({ error: 'Failed to load P2P asset transfers.' });
+  }
+});
+
+// POST /api/transfers/asset — ACID Peer-to-Peer Asset Transfer
+app.post('/api/transfers/asset', async (req, res) => {
+  const senderId = Number(req.body?.sender_id);
+  const recipientUsername = (req.body?.recipient_username || '').trim();
+  const assetId = Number(req.body?.asset_id);
+  const qty = Number(req.body?.quantity);
+
+  if (!senderId || !recipientUsername || !assetId || !Number.isFinite(qty) || qty <= 0) {
+    return res.status(400).json({ error: 'Provide recipient username, asset, and valid quantity.' });
+  }
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // 1. Validate recipient
+    const [recRows] = await conn.execute(
+      'SELECT user_id, username, account_status FROM users WHERE username = ? LIMIT 1',
+      [recipientUsername]
+    );
+    if (recRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: `User "@${recipientUsername}" not found.` });
+    }
+    const recipient = recRows[0];
+    if (Number(recipient.user_id) === senderId) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Cannot transfer assets to yourself.' });
+    }
+    if (recipient.account_status !== 'ACTIVE') {
+      await conn.rollback();
+      return res.status(403).json({ error: 'Recipient account is suspended or inactive.' });
+    }
+
+    // 2. Lock sender's portfolio holding
+    const [senderPort] = await conn.execute(
+      'SELECT portfolio_id, total_fraction_owned, total_amount_invested, average_purchase_price FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
+      [senderId, assetId]
+    );
+    if (senderPort.length === 0 || Number(senderPort[0].total_fraction_owned) < qty - 1e-12) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Insufficient asset holdings to transfer.' });
+    }
+
+    const sp = senderPort[0];
+    const ownedQty = Number(sp.total_fraction_owned);
+    const actualQty = Math.min(qty, ownedQty);
+
+    // 3. Get live valuation for ledger record
+    const [assetRows] = await conn.execute(
+      'SELECT asset_id, symbol, current_price FROM assets WHERE asset_id = ? LIMIT 1',
+      [assetId]
+    );
+    const asset = assetRows[0];
+    const live = liveState[asset.symbol];
+    const unitPrice = live && live.price > 0 ? live.price : Number(asset.current_price);
+    const notionalValue = Number((actualQty * unitPrice).toFixed(2));
+
+    // Proportional cost basis moved from sender to recipient
+    const transferRatio = ownedQty > 0 ? actualQty / ownedQty : 0;
+    const transferredBasis = Number((Number(sp.total_amount_invested) * transferRatio).toFixed(2));
+
+    // 4. Deduct from sender's portfolio
+    const remQty = Math.max(0, ownedQty - actualQty);
+    const remInvested = remQty < 1e-12 ? 0 : Math.max(0, Number((Number(sp.total_amount_invested) - transferredBasis).toFixed(2)));
+    const remAvg = remQty < 1e-12 ? 0 : Number(sp.average_purchase_price);
+
+    await conn.execute(
+      `UPDATE portfolio
+       SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ?
+       WHERE user_id = ? AND portfolio_id = ?`,
+      [remQty < 1e-12 ? 0 : remQty, remInvested, remAvg, senderId, sp.portfolio_id]
+    );
+
+    // 5. Credit recipient's portfolio (upsert)
+    const [recPort] = await conn.execute(
+      'SELECT portfolio_id, total_fraction_owned, total_amount_invested FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
+      [recipient.user_id, assetId]
+    );
+
+    if (recPort.length > 0) {
+      const rp = recPort[0];
+      const newRecQty = Number(rp.total_fraction_owned) + actualQty;
+      const newRecInv = Number(rp.total_amount_invested) + transferredBasis;
+      const newRecAvg = newRecQty > 0 ? newRecInv / newRecQty : unitPrice;
+
+      await conn.execute(
+        `UPDATE portfolio
+         SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ?
+         WHERE user_id = ? AND portfolio_id = ?`,
+        [newRecQty, newRecInv, newRecAvg, recipient.user_id, rp.portfolio_id]
+      );
+    } else {
+      const [[{ nextId }]] = await conn.execute(
+        'SELECT COALESCE(MAX(portfolio_id), 0) + 1 AS nextId FROM portfolio WHERE user_id = ?',
+        [recipient.user_id]
+      );
+      const initAvg = actualQty > 0 ? transferredBasis / actualQty : unitPrice;
+      await conn.execute(
+        `INSERT INTO portfolio (user_id, portfolio_id, asset_id, total_fraction_owned, total_amount_invested, average_purchase_price)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [recipient.user_id, nextId, assetId, actualQty, transferredBasis, initAvg]
+      );
+    }
+
+    // 6. Log P2P transfer in immutable `trade` ledger
+    await conn.execute(
+      `INSERT INTO trade (buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETED')`,
+      [recipient.user_id, senderId, assetId, assetId, actualQty, actualQty, unitPrice, notionalValue]
+    );
+
+    await conn.commit();
+    res.json({
+      message: `Transferred ${actualQty.toFixed(6)} ${asset.symbol} to @${recipient.username}`
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Asset transfer error:', err);
+    res.status(500).json({ error: 'Asset transfer failed.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);
