@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const WebSocket = require('ws');
 const bcrypt = require('bcryptjs');
 const pool = require('./db');
@@ -8,6 +9,47 @@ const pool = require('./db');
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'pages')));
+
+// =========================================================
+// AAANNNNNNN ID VALIDATION & GENERATION HELPERS
+// =========================================================
+function parsePrefixedId(val, expectedPrefix) {
+  const s = String(val ?? '').trim().toUpperCase();
+  const re = new RegExp(`^${expectedPrefix}[0-9]{7}$`);
+  return re.test(s) ? s : null;
+}
+
+// Ordered IDs: USR0000001, TRD0000001 (must be called inside an active transaction)
+async function nextSequentialId(conn, tableName, columnName, prefix) {
+  const [rows] = await conn.execute(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING(${columnName}, 4) AS UNSIGNED)), 0) + 1 AS nextNum
+     FROM ${tableName}
+     WHERE ${columnName} REGEXP ?
+     FOR UPDATE`,
+    [`^${prefix}[0-9]{7}$`]
+  );
+  const nextNum = Number(rows[0]?.nextNum || 1);
+  if (nextNum > 9999999) {
+    throw new Error(`Maximum ID capacity reached for ${prefix}`);
+  }
+  return `${prefix}${String(nextNum).padStart(7, '0')}`;
+}
+
+// Random 7-digit IDs with DB collision check: WLT, AST, LND, LON, PAY
+async function generateUniqueRandomId(executor, tableName, columnName, prefix) {
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const num = crypto.randomInt(0, 10000000);
+    const candidate = `${prefix}${String(num).padStart(7, '0')}`;
+    const [existing] = await executor.execute(
+      `SELECT 1 FROM ${tableName} WHERE ${columnName} = ? LIMIT 1`,
+      [candidate]
+    );
+    if (existing.length === 0) {
+      return candidate;
+    }
+  }
+  throw new Error(`Unable to generate unique ${prefix} ID after multiple attempts.`);
+}
 
 // In-memory state populated dynamically from the MySQL `assets` table
 const liveState = {};       // symbol -> { asset_id, symbol, name, asset_type, finnhub, price, prevClose, changePct, risk }
@@ -246,7 +288,7 @@ app.get('/register.html', (req, res) => {
   res.redirect('/auth.html?mode=register');
 });
 
-// POST /api/auth/register — Atomic ACID signup (users + wallets + wallet_history)
+// POST /api/auth/register — Atomic ACID signup (USR0000001 + WLTNNNNNNN + wallet_history)
 app.post('/api/auth/register', async (req, res) => {
   const {
     username,
@@ -276,20 +318,22 @@ app.post('/api/auth/register', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [userResult] = await conn.execute(
-      `INSERT INTO users (username, first_name, middle_name, last_name, email, password_hash, role, account_status)
-       VALUES (?, ?, ?, ?, ?, ?, 'USER', 'ACTIVE')`,
-      [cleanUser, cleanFirst, cleanMiddle, cleanLast, cleanEmail, passwordHash]
+    const userId = await nextSequentialId(conn, 'users', 'user_id', 'USR');
+
+    await conn.execute(
+      `INSERT INTO users (user_id, username, first_name, middle_name, last_name, email, password_hash, role, account_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'USER', 'ACTIVE')`,
+      [userId, cleanUser, cleanFirst, cleanMiddle, cleanLast, cleanEmail, passwordHash]
     );
-    const userId = userResult.insertId;
 
     const initialBalance = 10000.00;
-    const [walletResult] = await conn.execute(
-      `INSERT INTO wallets (user_id, currency, balance)
-       VALUES (?, 'INR', ?)`,
-      [userId, initialBalance]
+    const walletId = await generateUniqueRandomId(conn, 'wallets', 'wallet_id', 'WLT');
+
+    await conn.execute(
+      `INSERT INTO wallets (wallet_id, user_id, currency, balance)
+       VALUES (?, ?, 'INR', ?)`,
+      [walletId, userId, initialBalance]
     );
-    const walletId = walletResult.insertId;
 
     await conn.execute(
       `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
@@ -429,7 +473,7 @@ app.get('/api/assets', async (req, res) => {
   }
 });
 
-// API: Lookup or add a non-featured ticker on demand
+// API: Lookup or add a non-featured ticker on demand (generates random ASTNNNNNNN)
 app.post('/api/assets/lookup', async (req, res) => {
   const rawSymbol = (req.body?.symbol || '').trim().toUpperCase();
   const assetType = req.body?.asset_type === 'CRYPTO' ? 'CRYPTO' : 'STOCK';
@@ -475,15 +519,16 @@ app.post('/api/assets/lookup', async (req, res) => {
       const prevClose = typeof meta.chartPreviousClose === 'number' && meta.chartPreviousClose > 0 ? meta.chartPreviousClose : price;
       const changePct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
       const assetName = meta.longName || meta.shortName || rawSymbol;
+      const assetId = await generateUniqueRandomId(pool, 'assets', 'asset_id', 'AST');
 
-      const [ins] = await pool.query(
-        `INSERT INTO assets (symbol, name, asset_type, current_price, price_change, risk, is_active)
-         VALUES (?, ?, 'STOCK', ?, ?, 'MEDIUM', TRUE)`,
-        [rawSymbol, assetName, price, changePct]
+      await pool.query(
+        `INSERT INTO assets (asset_id, symbol, name, asset_type, current_price, price_change, risk, is_active)
+         VALUES (?, ?, ?, 'STOCK', ?, ?, 'MEDIUM', TRUE)`,
+        [assetId, rawSymbol, assetName, price, changePct]
       );
 
       const newRow = {
-        asset_id: ins.insertId,
+        asset_id: assetId,
         symbol: rawSymbol,
         name: assetName,
         asset_type: 'STOCK',
@@ -515,15 +560,16 @@ app.post('/api/assets/lookup', async (req, res) => {
 
     const risk = await getAssetRisk(rawSymbol, finnhubSym, assetType, apiKey);
     const changePct = typeof quote.dp === 'number' ? quote.dp : 0;
+    const assetId = await generateUniqueRandomId(pool, 'assets', 'asset_id', 'AST');
 
-    const [ins] = await pool.query(
-      `INSERT INTO assets (symbol, name, asset_type, current_price, price_change, risk, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
-      [rawSymbol, assetName, assetType, quote.c, changePct, risk]
+    await pool.query(
+      `INSERT INTO assets (asset_id, symbol, name, asset_type, current_price, price_change, risk, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)`,
+      [assetId, rawSymbol, assetName, assetType, quote.c, changePct, risk]
     );
 
     const newRow = {
-      asset_id: ins.insertId,
+      asset_id: assetId,
       symbol: rawSymbol,
       name: assetName,
       asset_type: assetType,
@@ -611,6 +657,9 @@ app.get('/api/hero-history', async (req, res) => {
 
 // API: Get cached historical candles (1D, 1W, 1M, 1Y) from Binance (Crypto) or Yahoo Finance (Stocks)
 app.get('/api/assets/:id/history', async (req, res) => {
+  const assetId = parsePrefixedId(req.params.id, 'AST');
+  if (!assetId) return res.status(400).json({ error: 'Invalid asset ID.' });
+
   const range = (req.query.range || '1D').toUpperCase();
   const validRanges = ['1D', '1W', '1M', '1Y'];
   const selectedRange = validRanges.includes(range) ? range : '1D';
@@ -618,7 +667,7 @@ app.get('/api/assets/:id/history', async (req, res) => {
   try {
     const [rows] = await pool.query(
       'SELECT asset_id, symbol, asset_type FROM assets WHERE asset_id = ?',
-      [req.params.id]
+      [assetId]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Asset not found' });
 
@@ -728,7 +777,7 @@ app.get('/api/stats', async (req, res) => {
 
 // API: Get full live dashboard payload for a user
 app.get('/api/dashboard/:userId', async (req, res) => {
-  const userId = Number(req.params.userId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
   if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
 
   try {
@@ -807,8 +856,9 @@ app.get('/api/dashboard/:userId', async (req, res) => {
     );
 
     const recent = tradeRows.map((t) => {
-      const isBuy = Number(t.buyer_user_id) === userId;
+      const isBuy = t.buyer_user_id === userId;
       return {
+        trade_id: t.trade_id,
         type: isBuy ? 'BUY' : 'SELL',
         sym: isBuy ? t.buyer_symbol : (t.seller_symbol || t.buyer_symbol),
         qty: Number(isBuy ? t.buyer_asset_fraction : (t.seller_asset_fraction || t.buyer_asset_fraction)),
@@ -856,7 +906,7 @@ app.get('/api/dashboard/:userId', async (req, res) => {
       .sort((a, b) => b.net_worth - a.net_worth);
 
     const totalTraders = standings.length || 1;
-    const myIdx = standings.findIndex((s) => Number(s.user_id) === userId);
+    const myIdx = standings.findIndex((s) => s.user_id === userId);
     const rank = myIdx >= 0 ? myIdx + 1 : totalTraders;
     const netWorth = myIdx >= 0 ? standings[myIdx].net_worth : (walletBalance + portfolioValue);
 
@@ -910,8 +960,8 @@ app.get('/api/dashboard/:userId', async (req, res) => {
 
 // API: Get user's wallet balance + existing position in a single asset (for Markets drawer)
 app.get('/api/portfolio/:userId/asset/:assetId', async (req, res) => {
-  const userId = Number(req.params.userId);
-  const assetId = Number(req.params.assetId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
+  const assetId = parsePrefixedId(req.params.assetId, 'AST');
   if (!userId || !assetId) return res.status(400).json({ error: 'Invalid IDs.' });
 
   try {
@@ -957,10 +1007,10 @@ app.get('/api/portfolio/:userId/asset/:assetId', async (req, res) => {
   }
 });
 
-// POST /api/trades/buy — ACID fractional/whole asset purchase
+// POST /api/trades/buy — ACID fractional/whole asset purchase (ordered TRD0000001)
 app.post('/api/trades/buy', async (req, res) => {
-  const userId = Number(req.body?.user_id);
-  const assetId = Number(req.body?.asset_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
+  const assetId = parsePrefixedId(req.body?.asset_id, 'AST');
   const amount = Number(req.body?.amount);
 
   if (!userId || !assetId || !Number.isFinite(amount) || amount <= 0) {
@@ -1040,10 +1090,12 @@ app.post('/api/trades/buy', async (req, res) => {
       );
     }
 
+    const tradeId = await nextSequentialId(conn, 'trade', 'trade_id', 'TRD');
+
     await conn.execute(
-      `INSERT INTO trade (buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
-       VALUES (?, NULL, ?, NULL, ?, 0, ?, ?, 'COMPLETED')`,
-      [userId, assetId, acquiredFraction, unitPrice, amount]
+      `INSERT INTO trade (trade_id, buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
+       VALUES (?, ?, NULL, ?, NULL, ?, 0, ?, ?, 'COMPLETED')`,
+      [tradeId, userId, assetId, acquiredFraction, unitPrice, amount]
     );
 
     await conn.execute(
@@ -1054,6 +1106,7 @@ app.post('/api/trades/buy', async (req, res) => {
 
     await conn.commit();
     res.json({
+      trade_id: tradeId,
       message: `Bought ${acquiredFraction.toFixed(6)} ${asset.symbol} for ${amount.toFixed(2)} VC`,
       wallet_balance: newBalance
     });
@@ -1066,10 +1119,10 @@ app.post('/api/trades/buy', async (req, res) => {
   }
 });
 
-// POST /api/trades/sell — ACID fractional/whole asset sale
+// POST /api/trades/sell — ACID fractional/whole asset sale (ordered TRD0000001)
 app.post('/api/trades/sell', async (req, res) => {
-  const userId = Number(req.body?.user_id);
-  const assetId = Number(req.body?.asset_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
+  const assetId = parsePrefixedId(req.body?.asset_id, 'AST');
   const sellQty = Number(req.body?.quantity);
 
   if (!userId || !assetId || !Number.isFinite(sellQty) || sellQty <= 0) {
@@ -1132,10 +1185,12 @@ app.post('/api/trades/sell', async (req, res) => {
       [remainingQty < 1e-12 ? 0 : remainingQty, remainingInvested, avgPrice, userId, pos.portfolio_id]
     );
 
+    const tradeId = await nextSequentialId(conn, 'trade', 'trade_id', 'TRD');
+
     await conn.execute(
-      `INSERT INTO trade (buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
-       VALUES (?, ?, ?, ?, 0, ?, ?, ?, 'COMPLETED')`,
-      [userId, userId, assetId, assetId, actualSellQty, unitPrice, proceeds]
+      `INSERT INTO trade (trade_id, buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, 'COMPLETED')`,
+      [tradeId, userId, userId, assetId, assetId, actualSellQty, unitPrice, proceeds]
     );
 
     await conn.execute(
@@ -1146,6 +1201,7 @@ app.post('/api/trades/sell', async (req, res) => {
 
     await conn.commit();
     res.json({
+      trade_id: tradeId,
       message: `Sold ${actualSellQty.toFixed(6)} ${asset.symbol} for ${proceeds.toFixed(2)} VC`,
       wallet_balance: newBalance
     });
@@ -1160,7 +1216,7 @@ app.post('/api/trades/sell', async (req, res) => {
 
 // API: Single asset details + latest performance snapshot
 app.get('/api/assets/:id', async (req, res) => {
-  const assetId = Number(req.params.id);
+  const assetId = parsePrefixedId(req.params.id, 'AST');
   if (!assetId) return res.status(400).json({ error: 'Invalid asset ID.' });
 
   try {
@@ -1204,7 +1260,7 @@ app.get('/api/assets/:id', async (req, res) => {
 // API: Verify recipient username for P2P transfers
 app.get('/api/users/verify/:username', async (req, res) => {
   const clean = (req.params.username || '').trim();
-  const excludeId = Number(req.query.exclude || 0);
+  const excludeId = parsePrefixedId(req.query.exclude, 'USR');
   if (!clean) return res.status(400).json({ error: 'Enter a username.' });
 
   try {
@@ -1219,7 +1275,7 @@ app.get('/api/users/verify/:username', async (req, res) => {
       return res.status(404).json({ error: `User "@${clean}" not found.` });
     }
     const u = rows[0];
-    if (excludeId && Number(u.user_id) === excludeId) {
+    if (excludeId && u.user_id === excludeId) {
       return res.status(400).json({ error: 'You cannot transfer assets to yourself.' });
     }
     if (u.account_status !== 'ACTIVE') {
@@ -1242,7 +1298,7 @@ let p2pRoomSeq = 100;
 
 // GET /api/p2p/rooms/:userId — Active Negotiation Room + Settled Single-Asset Swap History
 app.get('/api/p2p/rooms/:userId', async (req, res) => {
-  const userId = Number(req.params.userId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
   if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
 
   try {
@@ -1279,7 +1335,7 @@ app.get('/api/p2p/rooms/:userId', async (req, res) => {
     );
 
     const history = rows.map((r) => {
-      const isMaker = Number(r.buyer_user_id) === userId;
+      const isMaker = r.buyer_user_id === userId;
       return {
         trade_id: r.trade_id,
         gave_qty: Number(isMaker ? r.maker_gives_qty : r.maker_gets_qty),
@@ -1301,7 +1357,7 @@ app.get('/api/p2p/rooms/:userId', async (req, res) => {
 
 // POST /api/p2p/invite — Step 1: Maker invites Taker
 app.post('/api/p2p/invite', async (req, res) => {
-  const makerId = Number(req.body?.maker_id);
+  const makerId = parsePrefixedId(req.body?.maker_id, 'USR');
   const takerUsername = (req.body?.taker_username || '').trim();
   if (!makerId || !takerUsername) return res.status(400).json({ error: 'Enter recipient username.' });
 
@@ -1311,7 +1367,7 @@ app.post('/api/p2p/invite', async (req, res) => {
 
     if (!maker || tRows.length === 0) return res.status(404).json({ error: `User "@${takerUsername}" not found.` });
     const taker = tRows[0];
-    if (Number(taker.user_id) === makerId) return res.status(400).json({ error: 'Cannot trade with yourself.' });
+    if (taker.user_id === makerId) return res.status(400).json({ error: 'Cannot trade with yourself.' });
     if (taker.account_status !== 'ACTIVE') return res.status(403).json({ error: 'Recipient account is not active.' });
 
     for (const r of p2pRooms.values()) {
@@ -1319,7 +1375,7 @@ app.post('/api/p2p/invite', async (req, res) => {
         if (r.maker.user_id === makerId || r.taker.user_id === makerId) {
           return res.status(400).json({ error: 'You already have an active P2P trade room open.' });
         }
-        if (r.maker.user_id === Number(taker.user_id) || r.taker.user_id === Number(taker.user_id)) {
+        if (r.maker.user_id === taker.user_id || r.taker.user_id === taker.user_id) {
           return res.status(400).json({ error: `@${taker.username} is currently in another active P2P trade.` });
         }
       }
@@ -1329,8 +1385,8 @@ app.post('/api/p2p/invite', async (req, res) => {
     const room = {
       room_id: roomId,
       status: 'INVITED', // INVITED -> A BUILDING -> B REVIEWING -> B BUILDING -> A REVIEWING -> SETTLED | CLOSED
-      maker: { user_id: Number(maker.user_id), username: maker.username },
-      taker: { user_id: Number(taker.user_id), username: taker.username },
+      maker: { user_id: maker.user_id, username: maker.username },
+      taker: { user_id: taker.user_id, username: taker.username },
       frozen_prices: {},
       offer_a: null, // { asset_id, symbol, qty, unit_price, total_vc }
       offer_b: null,
@@ -1349,7 +1405,7 @@ app.post('/api/p2p/invite', async (req, res) => {
 // POST /api/p2p/:roomId/respond-invite — Step 2: Taker accepts (locks live prices) or declines
 app.post('/api/p2p/:roomId/respond-invite', async (req, res) => {
   const roomId = Number(req.params.roomId);
-  const userId = Number(req.body?.user_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const accept = Boolean(req.body?.accept);
 
   const room = p2pRooms.get(roomId);
@@ -1385,8 +1441,8 @@ app.post('/api/p2p/:roomId/respond-invite', async (req, res) => {
 // POST /api/p2p/:roomId/submit-offer — Step 3 / Step 5: Submit 1 asset + qty
 app.post('/api/p2p/:roomId/submit-offer', async (req, res) => {
   const roomId = Number(req.params.roomId);
-  const userId = Number(req.body?.user_id);
-  const assetId = Number(req.body?.asset_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
+  const assetId = parsePrefixedId(req.body?.asset_id, 'AST');
   const qty = Number(req.body?.qty);
 
   const room = p2pRooms.get(roomId);
@@ -1462,7 +1518,7 @@ app.post('/api/p2p/:roomId/submit-offer', async (req, res) => {
 // POST /api/p2p/:roomId/review — Step 4 / Step 6 & 7: Accept, Reject, or Leave
 app.post('/api/p2p/:roomId/review', async (req, res) => {
   const roomId = Number(req.params.roomId);
-  const userId = Number(req.body?.user_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const decision = req.body?.decision; // 'ACCEPT' | 'REJECT' | 'LEAVE'
 
   const room = p2pRooms.get(roomId);
@@ -1508,7 +1564,7 @@ app.post('/api/p2p/:roomId/review', async (req, res) => {
     return res.json({ message: 'Offer accepted! Now select your single asset to match.', room });
   }
 
-  // Step 6 & 7: Maker accepts Taker's counter-offer -> ATOMIC 1-ROW SWAP SETTLEMENT
+  // Step 6 & 7: Maker accepts Taker's counter-offer -> ATOMIC 1-ROW SWAP SETTLEMENT (ordered TRD0000001)
   if (!(isMaker && room.status === 'A REVIEWING')) {
     return res.status(400).json({ error: 'Not ready for final settlement.' });
   }
@@ -1588,10 +1644,12 @@ app.post('/api/p2p/:roomId/review', async (req, res) => {
     await creditPortfolio(takerId, offA.asset_id, actualMakerGave, offA.unit_price, offA.total_vc);
     await creditPortfolio(makerId, offB.asset_id, actualTakerGave, offB.unit_price, offB.total_vc);
 
+    const tradeId = await nextSequentialId(conn, 'trade', 'trade_id', 'TRD');
+
     await conn.execute(
-      `INSERT INTO trade (buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETED')`,
-      [makerId, takerId, offB.asset_id, offA.asset_id, actualTakerGave, actualMakerGave, offB.unit_price, offA.total_vc]
+      `INSERT INTO trade (trade_id, buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETED')`,
+      [tradeId, makerId, takerId, offB.asset_id, offA.asset_id, actualTakerGave, actualMakerGave, offB.unit_price, offA.total_vc]
     );
 
     // Log P2P asset swap in both users' wallet_history so it appears on Wallets ledger
@@ -1616,11 +1674,11 @@ app.post('/api/p2p/:roomId/review', async (req, res) => {
     await conn.commit();
 
     room.status = 'SETTLED';
-    room.last_note = `Swap settled: ${actualMakerGave.toFixed(6)} ${offA.symbol} ⇄ ${actualTakerGave.toFixed(6)} ${offB.symbol}`;
+    room.last_note = `Swap settled (${tradeId}): ${actualMakerGave.toFixed(6)} ${offA.symbol} ⇄ ${actualTakerGave.toFixed(6)} ${offB.symbol}`;
     broadcastP2PEvent(room);
     p2pRooms.delete(roomId);
 
-    res.json({ message: 'Single-asset P2P swap settled!', room });
+    res.json({ trade_id: tradeId, message: 'Single-asset P2P swap settled!', room });
   } catch (err) {
     if (conn) await conn.rollback();
     console.error('P2P settle error:', err);
@@ -1632,7 +1690,7 @@ app.post('/api/p2p/:roomId/review', async (req, res) => {
 
 // API: Full portfolio holdings, valuation summary, and 7D series
 app.get('/api/portfolio/:userId', async (req, res) => {
-  const userId = Number(req.params.userId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
   if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
 
   try {
@@ -1725,7 +1783,7 @@ app.get('/api/portfolio/:userId', async (req, res) => {
 
 // API: Wallets, Central Credit Pool & Immutable Ledger Overview
 app.get('/api/wallets/:userId/overview', async (req, res) => {
-  const userId = Number(req.params.userId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
   if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
 
   try {
@@ -1842,7 +1900,7 @@ app.get('/api/wallets/:userId/overview', async (req, res) => {
 
 // POST /api/transfers/cash — ACID Peer-to-Peer VC Transfer
 app.post('/api/transfers/cash', async (req, res) => {
-  const senderId = Number(req.body?.sender_id);
+  const senderId = parsePrefixedId(req.body?.sender_id, 'USR');
   const recipientUsername = (req.body?.recipient_username || '').trim();
   const amount = Number(req.body?.amount);
   const note = (req.body?.note || '').trim();
@@ -1875,7 +1933,7 @@ app.post('/api/transfers/cash', async (req, res) => {
     const sender = senderRows[0];
     const recipient = recRows[0];
 
-    if (Number(recipient.user_id) === senderId) {
+    if (recipient.user_id === senderId) {
       await conn.rollback();
       return res.status(400).json({ error: 'Cannot transfer VC to yourself.' });
     }
@@ -1884,16 +1942,15 @@ app.post('/api/transfers/cash', async (req, res) => {
       return res.status(403).json({ error: 'Recipient account is not active.' });
     }
 
-    // Lock both wallets in ascending user_id order to prevent deadlocks
-    const firstId = Math.min(senderId, Number(recipient.user_id));
-    const secondId = Math.max(senderId, Number(recipient.user_id));
+    // Lock both wallets in deterministic lexicographical user_id order to prevent deadlocks
+    const [firstId, secondId] = [senderId, recipient.user_id].sort((a, b) => a.localeCompare(b));
     const [walletRows] = await conn.execute(
       'SELECT wallet_id, user_id, balance FROM wallets WHERE user_id IN (?, ?) ORDER BY user_id ASC FOR UPDATE',
       [firstId, secondId]
     );
 
-    const senderWallet = walletRows.find((w) => Number(w.user_id) === senderId);
-    const recWallet = walletRows.find((w) => Number(w.user_id) === Number(recipient.user_id));
+    const senderWallet = walletRows.find((w) => w.user_id === senderId);
+    const recWallet = walletRows.find((w) => w.user_id === recipient.user_id);
 
     if (!senderWallet || !recWallet) {
       await conn.rollback();
@@ -1936,9 +1993,9 @@ app.post('/api/transfers/cash', async (req, res) => {
   }
 });
 
-// POST /api/pool/lend — Supply idle VC to Central Credit Pool (6% p.a.)
+// POST /api/pool/lend — Supply idle VC to Central Credit Pool (6% p.a., random LNDNNNNNNN)
 app.post('/api/pool/lend', async (req, res) => {
-  const userId = Number(req.body?.user_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const amount = Number(req.body?.amount);
   if (!userId || !Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: 'Enter a valid amount to lend.' });
@@ -1961,12 +2018,13 @@ app.post('/api/pool/lend', async (req, res) => {
 
     const wallet = wRows[0];
     const newBal = Number((Number(wallet.balance) - cleanAmt).toFixed(2));
+    const lendingId = await generateUniqueRandomId(conn, 'lending', 'lending_id', 'LND');
 
     await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newBal, wallet.wallet_id]);
     await conn.execute(
-      `INSERT INTO lending (lender_id, principal_amount, available_amount, interest_rate, term_days, lending_status, description)
-       VALUES (?, ?, ?, 6.000, 30, 'OPEN', 'Central Credit Pool Supply')`,
-      [userId, cleanAmt, cleanAmt]
+      `INSERT INTO lending (lending_id, lender_id, principal_amount, available_amount, interest_rate, term_days, lending_status, description)
+       VALUES (?, ?, ?, ?, 6.000, 30, 'OPEN', 'Central Credit Pool Supply')`,
+      [lendingId, userId, cleanAmt, cleanAmt]
     );
     await conn.execute(
       `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
@@ -1975,7 +2033,11 @@ app.post('/api/pool/lend', async (req, res) => {
     );
 
     await conn.commit();
-    res.json({ message: `Supplied ${cleanAmt.toFixed(2)} VC to Central Credit Pool at 6% p.a.`, new_balance: newBal });
+    res.json({
+      lending_id: lendingId,
+      message: `Supplied ${cleanAmt.toFixed(2)} VC to Central Credit Pool at 6% p.a.`,
+      new_balance: newBal
+    });
   } catch (err) {
     if (conn) await conn.rollback();
     console.error('Pool lend error:', err);
@@ -1987,8 +2049,8 @@ app.post('/api/pool/lend', async (req, res) => {
 
 // POST /api/pool/redeem — Redeem unborrowed pool liquidity + accrued interest
 app.post('/api/pool/redeem', async (req, res) => {
-  const userId = Number(req.body?.user_id);
-  const lendingId = Number(req.body?.lending_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
+  const lendingId = parsePrefixedId(req.body?.lending_id, 'LND');
   if (!userId || !lendingId) return res.status(400).json({ error: 'Invalid redeem request.' });
 
   let conn;
@@ -2000,7 +2062,7 @@ app.post('/api/pool/redeem', async (req, res) => {
       'SELECT lending_id, lender_id, principal_amount, available_amount, interest_rate, lending_status, created_at FROM lending WHERE lending_id = ? FOR UPDATE',
       [lendingId]
     );
-    if (lRows.length === 0 || Number(lRows[0].lender_id) !== userId) {
+    if (lRows.length === 0 || lRows[0].lender_id !== userId) {
       await conn.rollback();
       return res.status(404).json({ error: 'Lending position not found.' });
     }
@@ -2044,9 +2106,9 @@ app.post('/api/pool/redeem', async (req, res) => {
   }
 });
 
-// POST /api/pool/borrow — Borrow from Central Credit Pool against 50% Portfolio LTV (12% p.a.)
+// POST /api/pool/borrow — Borrow from Central Credit Pool against 50% Portfolio LTV (12% p.a., random LONNNNNNNN)
 app.post('/api/pool/borrow', async (req, res) => {
-  const userId = Number(req.body?.user_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const amount = Number(req.body?.amount);
   if (!userId || !Number.isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: 'Enter a valid amount to borrow.' });
@@ -2115,11 +2177,12 @@ app.post('/api/pool/borrow', async (req, res) => {
       const termDays = offer.term_days || 30;
       const rate = 12.0;
       const totalRepay = Number((take * (1 + (rate / 100) * (termDays / 365))).toFixed(2));
+      const loanId = await generateUniqueRandomId(conn, 'loans', 'loan_id', 'LON');
 
       await conn.execute(
-        `INSERT INTO loans (borrower_id, lender_id, lending_id, principal_amount, interest_rate, term_days, total_repayment, amount_paid, loan_status, start_date, due_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0.00, 'ACTIVE', CURDATE(), DATE_ADD(CURDATE(), INTERVAL ? DAY))`,
-        [userId, offer.lender_id, offer.lending_id, take, rate, termDays, totalRepay, termDays]
+        `INSERT INTO loans (loan_id, borrower_id, lender_id, lending_id, principal_amount, interest_rate, term_days, total_repayment, amount_paid, loan_status, start_date, due_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'ACTIVE', CURDATE(), DATE_ADD(CURDATE(), INTERVAL ? DAY))`,
+        [loanId, userId, offer.lender_id, offer.lending_id, take, rate, termDays, totalRepay, termDays]
       );
 
       remaining = Number((remaining - take).toFixed(2));
@@ -2150,8 +2213,8 @@ app.post('/api/pool/borrow', async (req, res) => {
 
 // POST /api/pool/repay — Repay loan (12% p.a.): 6% yield to lender, 6% spread retained in Credit Pool reserve
 app.post('/api/pool/repay', async (req, res) => {
-  const userId = Number(req.body?.user_id);
-  const loanId = Number(req.body?.loan_id);
+  const userId = parsePrefixedId(req.body?.user_id, 'USR');
+  const loanId = parsePrefixedId(req.body?.loan_id, 'LON');
   if (!userId || !loanId) return res.status(400).json({ error: 'Invalid repayment request.' });
 
   let conn;
@@ -2169,7 +2232,7 @@ app.post('/api/pool/repay', async (req, res) => {
        FOR UPDATE`,
       [loanId]
     );
-    if (loanRows.length === 0 || Number(loanRows[0].borrower_id) !== userId) {
+    if (loanRows.length === 0 || loanRows[0].borrower_id !== userId) {
       await conn.rollback();
       return res.status(404).json({ error: 'Active loan not found.' });
     }
@@ -2195,11 +2258,11 @@ app.post('/api/pool/repay', async (req, res) => {
     const poolSpread = Number((totalDue - lenderPayout).toFixed(2));
 
     const isReserveSlice = loan.lending_desc === 'Protocol Reserve Spread';
-    const lenderId = Number(loan.lender_id);
+    const lenderId = loan.lender_id || null;
 
-    // Lock borrower wallet (and lender wallet if it's a user-supplied slice) in ascending user_id order
+    // Lock borrower wallet (and lender wallet if it's a user-supplied slice) in lexicographical user_id order
     const lockIds = (!isReserveSlice && lenderId && lenderId !== userId)
-      ? [Math.min(userId, lenderId), Math.max(userId, lenderId)]
+      ? [userId, lenderId].sort((a, b) => a.localeCompare(b))
       : [userId];
 
     const [wRows] = await conn.execute(
@@ -2207,8 +2270,8 @@ app.post('/api/pool/repay', async (req, res) => {
       lockIds
     );
 
-    const bWallet = wRows.find((w) => Number(w.user_id) === userId);
-    const lWallet = (!isReserveSlice && lenderId) ? wRows.find((w) => Number(w.user_id) === lenderId) : null;
+    const bWallet = wRows.find((w) => w.user_id === userId);
+    const lWallet = (!isReserveSlice && lenderId) ? wRows.find((w) => w.user_id === lenderId) : null;
 
     if (!bWallet || Number(bWallet.balance) < totalDue) {
       await conn.rollback();
@@ -2221,14 +2284,14 @@ app.post('/api/pool/repay', async (req, res) => {
     await conn.execute(
       `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
        VALUES (?, 'LOAN_REPAYMENT', ?, ?, ?)`,
-      [bWallet.wallet_id, totalDue, newBorrowerBal, `Repaid Loan #${loanId} (${totalDue.toFixed(2)} VC incl. 12% p.a. interest)`]
+      [bWallet.wallet_id, totalDue, newBorrowerBal, `Repaid Loan ${loanId} (${totalDue.toFixed(2)} VC incl. 12% p.a. interest)`]
     );
 
     // Resolve admin user_id to anchor collective reserve rows in `lending`
     const [[adminUser]] = await conn.execute(
       "SELECT user_id FROM users WHERE role = 'ADMIN' ORDER BY user_id ASC LIMIT 1"
     );
-    const reserveHolderId = adminUser ? Number(adminUser.user_id) : (lenderId || userId);
+    const reserveHolderId = adminUser ? adminUser.user_id : (lenderId || userId);
 
     let collectiveReturnAmt = 0;
 
@@ -2251,23 +2314,26 @@ app.post('/api/pool/repay', async (req, res) => {
 
     // 2. Deposit the spread (or full reserve payoff) back into Central Credit Pool as collective borrowable liquidity
     if (collectiveReturnAmt > 0) {
+      const reserveLendingId = await generateUniqueRandomId(conn, 'lending', 'lending_id', 'LND');
       await conn.execute(
-        `INSERT INTO lending (lender_id, principal_amount, available_amount, interest_rate, term_days, lending_status, description)
-         VALUES (?, ?, ?, 6.000, 30, 'OPEN', 'Protocol Reserve Spread')`,
-        [reserveHolderId, collectiveReturnAmt, collectiveReturnAmt]
+        `INSERT INTO lending (lending_id, lender_id, principal_amount, available_amount, interest_rate, term_days, lending_status, description)
+         VALUES (?, ?, ?, ?, 6.000, 30, 'OPEN', 'Protocol Reserve Spread')`,
+        [reserveLendingId, reserveHolderId, collectiveReturnAmt, collectiveReturnAmt]
       );
     }
 
-    // 3. Mark loan as REPAID
+    // 3. Mark loan as REPAID & record payment with random PAYNNNNNNN
     const newPaid = Number((Number(loan.amount_paid) + totalDue).toFixed(2));
+    const paymentId = await generateUniqueRandomId(conn, 'loan_payments', 'payment_id', 'PAY');
+
     await conn.execute(
       "UPDATE loans SET amount_paid = ?, total_repayment = ?, loan_status = 'REPAID' WHERE loan_id = ?",
       [newPaid, newPaid, loanId]
     );
     await conn.execute(
-      `INSERT INTO loan_payments (loan_id, amount, payment_status)
-       VALUES (?, ?, 'COMPLETED')`,
-      [loanId, totalDue]
+      `INSERT INTO loan_payments (payment_id, loan_id, amount, payment_status)
+       VALUES (?, ?, ?, 'COMPLETED')`,
+      [paymentId, loanId, totalDue]
     );
 
     // 4. If the parent lending supply had 0 available_amount and no remaining active loans, mark it CLOSED
@@ -2290,7 +2356,8 @@ app.post('/api/pool/repay', async (req, res) => {
 
     await conn.commit();
     res.json({
-      message: `Repaid ${totalDue.toFixed(2)} VC — Loan #${loanId} settled (${collectiveReturnAmt.toFixed(2)} VC added to Credit Pool reserve)`,
+      payment_id: paymentId,
+      message: `Repaid ${totalDue.toFixed(2)} VC — Loan ${loanId} settled (${collectiveReturnAmt.toFixed(2)} VC added to Credit Pool reserve)`,
       new_balance: newBorrowerBal
     });
   } catch (err) {
@@ -2309,7 +2376,7 @@ app.post('/api/pool/repay', async (req, res) => {
 // GET /api/profile/check-username — Live availability check for username edits
 app.get('/api/profile/check-username', async (req, res) => {
   const username = (req.query.username || '').trim();
-  const excludeId = Number(req.query.exclude || 0);
+  const excludeId = parsePrefixedId(req.query.exclude, 'USR') || '';
 
   if (!username || !/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) {
     return res.json({ available: false, reason: '3–30 chars: letters, numbers, _, ., - only.' });
@@ -2331,13 +2398,13 @@ app.get('/api/profile/check-username', async (req, res) => {
 
 // GET /api/profile/:userId — Fetch real user metadata & trading summary
 app.get('/api/profile/:userId', async (req, res) => {
-  const userId = Number(req.params.userId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
   if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
 
   try {
     const [uRows] = await pool.query(
       `SELECT u.user_id, u.username, u.first_name, u.middle_name, u.last_name,
-              u.email, u.role, u.account_status, u.created_at,
+              u.email, u.role, u.account_status, u.created_on AS created_at,
               w.wallet_id, w.balance
        FROM users u
        LEFT JOIN wallets w ON u.user_id = w.user_id
@@ -2400,7 +2467,7 @@ app.get('/api/profile/:userId', async (req, res) => {
 
 // PUT /api/profile/:userId — Update name, username (unique), and email (unique)
 app.put('/api/profile/:userId', async (req, res) => {
-  const userId = Number(req.params.userId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
   const firstName = (req.body?.first_name || '').trim();
   const middleName = (req.body?.middle_name || '').trim() || null;
   const lastName = (req.body?.last_name || '').trim();
@@ -2463,7 +2530,7 @@ app.put('/api/profile/:userId', async (req, res) => {
 
 // PUT /api/profile/:userId/password — Verify current bcrypt hash & update password
 app.put('/api/profile/:userId/password', async (req, res) => {
-  const userId = Number(req.params.userId);
+  const userId = parsePrefixedId(req.params.userId, 'USR');
   const currentPassword = req.body?.current_password || '';
   const newPassword = req.body?.new_password || '';
 

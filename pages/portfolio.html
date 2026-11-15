@@ -301,7 +301,7 @@
           '<td class="td text-right font-semibold ' + plCls(h.return_pct) + '" id="p-rt-' + h.asset_id + '">' + pct(h.return_pct) + '</td>' +
           '<td class="td text-right whitespace-nowrap">' +
             '<a href="assets.html?id=' + h.asset_id + '" class="btn btn-ghost btn-sm mr-2">Trade</a>' +
-            '<button type="button" class="btn btn-loss btn-sm" onclick="openSellModal(' + h.asset_id + ')">Sell</button>' +
+            '<button type="button" class="btn btn-loss btn-sm" onclick="openSellModal(\'' + h.asset_id + '\')">Sell</button>' +
           '</td>' +
         '</tr>';
       }).join('');

@@ -2,12 +2,56 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Profile &middot; BATUA-Edu</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">B</div>
+      <span class="brand-text">BATUA<span>-Edu</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="markets.html" class="nav-link">Markets</a>
+      <a href="portfolio.html" class="nav-link">My Portfolio</a>
+      <a href="wallets.html" class="nav-link">Wallet</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+      <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="sidebar-footer">&copy; PRIMARY K's</div>
+  </aside>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
+    </div>
+    <div class="topbar-right">
+      <div class="user-menu" tabindex="0">
+        <div class="user-meta">
+          <p class="user-meta-name" id="user-name">Loading...</p>
+          <p class="user-meta-sub" id="user-role">user</p>
+        </div>
+        <div class="avatar" id="user-avatar">U</div>
+        <div class="user-dropdown">
+          <div class="user-dropdown-panel">
+            <a href="profile.html" class="dropdown-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profile
+            </a>
+            <button id="logout" type="button" class="dropdown-item dropdown-item-danger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
   <main class="app-main">
     <div class="container" id="page">
       <div class="page-header">
@@ -94,79 +138,80 @@
     </div>
   </main>
 
+  <div id="toasts" class="toast-container"></div>
+
   <script>
-    function getUser() {
-      try { return JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { return null; }
+    var currentUser;
+    try { currentUser = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { currentUser = null; }
+    if (!currentUser) { window.location.replace('auth.html?mode=login'); }
+
+    if (currentUser.role === 'admin') {
+      document.getElementById('admin-link').style.display = 'block';
     }
+    document.getElementById('logout').onclick = function () {
+      localStorage.removeItem('batua_user');
+      window.location.href = 'index.html';
+    };
+
+    function syncTopbar(u) {
+      document.getElementById('user-name').textContent = u.full_name || u.username;
+      document.getElementById('user-role').textContent = '@' + u.username + ' · ' + u.role;
+      document.getElementById('user-avatar').textContent = (u.full_name || u.username || 'U')[0].toUpperCase();
+    }
+    syncTopbar(currentUser);
+
     function esc(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
       });
     }
-    function money(n) {
-      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    function money(n, d) {
+      d = d === undefined ? 2 : d;
+      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
     }
     function dtF(s) {
       if (!s) return '—';
       return new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
-    function toast(m, t) {
-      var b = document.getElementById('toasts');
-      if (!b) {
-        b = document.createElement('div');
-        b.id = 'toasts';
-        b.className = 'toast-container';
-        document.body.appendChild(b);
+
+    function showToast(msg, variant, durationMs) {
+      var type = variant === 'success' ? 'buy' : (variant || 'info');
+      var duration = durationMs || 4000;
+      var titleMap = { buy: 'Confirmed', sell: 'Executed', info: 'Notice' };
+
+      var box = document.getElementById('toasts');
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.style.setProperty('--toast-duration', duration + 'ms');
+
+      el.innerHTML =
+        '<div class="toast-body">' +
+          '<p class="toast-title">' + (titleMap[type] || 'Notice') + '</p>' +
+          '<p class="text-slate-200">' + esc(msg) + '</p>' +
+        '</div>' +
+        '<button type="button" class="toast-close" aria-label="Close">&times;</button>' +
+        '<div class="toast-progress"></div>';
+
+      var closed = false;
+      function dismiss() {
+        if (closed) return;
+        closed = true;
+        el.classList.add('closing');
+        setTimeout(function () { el.remove(); }, 220);
       }
-      var e = document.createElement('div');
-      e.className = 'card toast ' + (t === 'success' ? 'toast-success' : 'toast-error');
-      e.textContent = m;
-      b.appendChild(e);
-      setTimeout(function () { e.remove(); }, 4000);
+
+      el.querySelector('.toast-close').onclick = dismiss;
+      box.appendChild(el);
+      setTimeout(dismiss, duration);
     }
 
-    var NAV = [
-      ['dashboard.html', 'Dashboard'],
-      ['markets.html', 'Markets'],
-      ['assets.html', 'Assets & Swap'],
-      ['wallets.html', 'Wallets & Pool'],
-      ['leaderboard.html', 'Leaderboard'],
-      ['profile.html', 'Profile']
-    ];
-
-    function shell(active) {
-      var u = getUser();
-      if (!u) { location.href = 'auth.html?mode=login'; return null; }
-      var links = NAV.slice();
-      if (u.role === 'admin') links.push(['admin.html', 'Admin Panel']);
-      var sb = '<aside id="sb" class="sidebar">' +
-        '<div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div>' +
-        '<nav class="sidebar-nav">' +
-          links.map(function (l) {
-            return '<a href="' + l[0] + '" class="nav-link' + (l[0] === active ? ' active' : '') + '">' + l[1] + '</a>';
-          }).join('') +
-          '<a href="auth.html?mode=login" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a>' +
-        '</nav></aside>';
-      var tb = '<header class="topbar">' +
-        '<div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button>' +
-        '<span class="badge badge-gain">LIVE ACCOUNT</span></div>' +
-        '<div class="topbar-right">' +
-          '<div class="user-meta"><p id="topbar-fullname" class="user-meta-name">' + esc(u.full_name) + '</p>' +
-          '<p id="topbar-sub" class="user-meta-sub">@' + esc(u.username) + ' &middot; ' + esc(u.role) + '</p></div>' +
-          '<div id="topbar-avatar" class="avatar">' + esc((u.full_name || 'U')[0].toUpperCase()) + '</div>' +
-        '</div></header>';
-      document.body.insertAdjacentHTML('afterbegin', sb + tb);
-      return u;
-    }
-
-    var currentUser = shell('profile.html');
     var usernameTimer = null;
     var usernameValid = true;
 
     function renderAccountRows(u) {
       var rows = [
-        ['User ID', '#' + u.user_id],
-        ['Wallet ID', u.wallet_id ? '#' + u.wallet_id : '—'],
+        ['User ID', u.user_id],
+        ['Wallet ID', u.wallet_id || '—'],
         ['Full name', u.full_name],
         ['Username', '@' + u.username],
         ['Email', u.email],
@@ -203,7 +248,7 @@
 
       usernameTimer = setTimeout(async function () {
         try {
-          var res = await fetch('/api/profile/check-username?username=' + encodeURIComponent(val) + '&exclude=' + currentUser.user_id);
+          var res = await fetch('/api/profile/check-username?username=' + encodeURIComponent(val) + '&exclude=' + encodeURIComponent(currentUser.user_id));
           var data = await res.json();
           usernameValid = Boolean(data.available);
           statusEl.textContent = data.reason;
@@ -218,12 +263,13 @@
       if (!currentUser) return;
       renderAccountRows(currentUser);
       try {
-        var res = await fetch('/api/profile/' + currentUser.user_id);
+        var res = await fetch('/api/profile/' + encodeURIComponent(currentUser.user_id));
         var data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to load profile');
 
         currentUser = Object.assign({}, currentUser, data.user);
         localStorage.setItem('batua_user', JSON.stringify(currentUser));
+        syncTopbar(currentUser);
         renderAccountRows(currentUser);
 
         var badge = document.getElementById('acct-status-badge');
@@ -235,7 +281,7 @@
         document.getElementById('stat-port').textContent = money(data.stats.portfolio_value) + ' VC';
         document.getElementById('stat-net').textContent = money(data.stats.net_worth) + ' VC';
       } catch (err) {
-        toast(err.message);
+        showToast(err.message, 'info');
       }
     }
 
@@ -247,16 +293,16 @@
       var email = document.getElementById('inp-email').value.trim();
 
       if (!first || !last || !username || !email) {
-        return toast('First name, last name, username, and email are required.');
+        return showToast('First name, last name, username, and email are required.', 'info');
       }
       if (!usernameValid) {
-        return toast('Please choose an available, valid username.');
+        return showToast('Please choose an available, valid username.', 'info');
       }
 
       var btn = document.getElementById('save-profile-btn');
       btn.disabled = true;
       try {
-        var res = await fetch('/api/profile/' + currentUser.user_id, {
+        var res = await fetch('/api/profile/' + encodeURIComponent(currentUser.user_id), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -278,13 +324,11 @@
         currentUser.email = data.email;
         localStorage.setItem('batua_user', JSON.stringify(currentUser));
 
-        document.getElementById('topbar-fullname').textContent = data.full_name;
-        document.getElementById('topbar-sub').textContent = '@' + data.username + ' · ' + currentUser.role;
-        document.getElementById('topbar-avatar').textContent = (data.full_name || 'U')[0].toUpperCase();
+        syncTopbar(currentUser);
         renderAccountRows(currentUser);
-        toast(data.message, 'success');
+        showToast(data.message, 'buy');
       } catch (err) {
-        toast(err.message);
+        showToast(err.message, 'info');
       } finally {
         btn.disabled = false;
       }
@@ -296,16 +340,16 @@
       var confirmPw = document.getElementById('confirm').value;
 
       if (!cur || next.length < 8) {
-        return toast('Provide current password and a new password (min 8 chars).');
+        return showToast('Provide current password and a new password (min 8 chars).', 'info');
       }
       if (next !== confirmPw) {
-        return toast('New password and confirmation do not match.');
+        return showToast('New password and confirmation do not match.', 'info');
       }
 
       var btn = document.getElementById('chpw-btn');
       btn.disabled = true;
       try {
-        var res = await fetch('/api/profile/' + currentUser.user_id + '/password', {
+        var res = await fetch('/api/profile/' + encodeURIComponent(currentUser.user_id) + '/password', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ current_password: cur, new_password: next })
@@ -313,12 +357,12 @@
         var data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Password update failed');
 
-        toast(data.message, 'success');
+        showToast(data.message, 'buy');
         document.getElementById('cur').value = '';
         document.getElementById('next').value = '';
         document.getElementById('confirm').value = '';
       } catch (err) {
-        toast(err.message);
+        showToast(err.message, 'info');
       } finally {
         btn.disabled = false;
       }

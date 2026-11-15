@@ -275,7 +275,7 @@
               '<p class="text-11 text-slate-500">Unborrowed: ' + money(l.available_amount) + ' VC &middot; ' + l.lending_status + '</p>' +
             '</div>' +
             (canRedeem
-              ? '<button type="button" class="btn btn-ghost btn-sm shrink-0" onclick="redeemPool(' + l.lending_id + ')">Redeem</button>'
+              ? '<button type="button" class="btn btn-ghost btn-sm shrink-0" onclick="redeemPool(\'' + l.lending_id + '\')">Redeem</button>'
               : '<span class="badge badge-sky shrink-0">Lent Out</span>') +
           '</div>';
         }).join('');
@@ -293,7 +293,7 @@
               '<p class="text-xs font-semibold text-white">Loan #' + l.loan_id + ': ' + money(l.principal_amount) + ' VC @ ' + l.interest_rate + '%</p>' +
               '<p class="text-11 text-slate-500">Due ' + (l.due_date ? String(l.due_date).slice(0, 10) : '30d') + ' &middot; Payoff &approx; ' + money(Math.max(0, payoff)) + ' VC</p>' +
             '</div>' +
-            '<button type="button" class="btn btn-gain btn-sm shrink-0" onclick="repayLoan(' + l.loan_id + ')">Repay</button>' +
+            '<button type="button" class="btn btn-gain btn-sm shrink-0" onclick="repayLoan(\'' + l.loan_id + '\')">Repay</button>' +
           '</div>';
         }).join('');
       }
@@ -434,7 +434,7 @@
         return;
       }
 
-      var myTurnToBuild = (isMaker && activeRoom.status === 'A BUILDING') || (!isMaker && activeRoom.status === 'B BUILDING');
+      var myTurnToBuild = (isMaker && activeRoom.status === 'A_BUILDING') || (!isMaker && activeRoom.status === 'B_BUILDING');
       if (myTurnToBuild) {
         var targetBanner = !isMaker
           ? '<div class="confirm-box mb-3">' +
@@ -444,7 +444,7 @@
           : '<p class="text-11 text-slate-400 mb-3">' + activeRoom.last_note + '</p>';
 
         var eligible = userHoldings.filter(function (h) {
-          return isMaker || !activeRoom.offer_a || Number(h.asset_id) !== Number(activeRoom.offer_a.asset_id);
+          return isMaker || !activeRoom.offer_a || String(h.asset_id) !== String(activeRoom.offer_a.asset_id);
         });
 
         var holdingOpts = eligible.length
@@ -551,7 +551,7 @@
 
     async function submitSingleOffer() {
       if (!activeRoom) return;
-      var assetId = Number(document.getElementById('offer-asset-sel')?.value || 0);
+      var assetId = (document.getElementById('offer-asset-sel')?.value || '').trim();
       var qty = Number(document.getElementById('offer-asset-qty')?.value || 0);
       if (!assetId || qty <= 0) return showToast('Select an asset and enter a valid quantity.', 'info');
 
