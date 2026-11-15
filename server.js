@@ -16,6 +16,16 @@ const betaCache = {};       // symbol -> 'LOW' | 'MEDIUM' | 'HIGH'
 const candleCache = {};     // 'BTC:1D' -> { data, expiresAt }
 const sseClients = new Set();
 
+function broadcastP2PEvent(room) {
+  if (typeof sseClients === 'undefined') return;
+  const payload = `event: p2p\ndata: ${JSON.stringify(room)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(payload);
+    } catch (_) {}
+  }
+}
+
 function toFinnhubSymbol(symbol, assetType) {
   const s = symbol.toUpperCase();
   if (assetType === 'CRYPTO') {
@@ -1225,62 +1235,283 @@ app.get('/api/users/verify/:username', async (req, res) => {
   }
 });
 
-// API: List P2P asset transfers for a user
-app.get('/api/transfers/asset/:userId', async (req, res) => {
+// =========================================================
+// OPTION 2: SINGLE-ASSET STEP-BY-STEP P2P NEGOTIATION ROOM
+// =========================================================
+const p2pRooms = new Map();
+let p2pRoomSeq = 100;
+
+// GET /api/p2p/rooms/:userId — Active Negotiation Room + Settled Single-Asset Swap History
+app.get('/api/p2p/rooms/:userId', async (req, res) => {
   const userId = Number(req.params.userId);
   if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
 
   try {
+    let activeRoom = null;
+    for (const room of p2pRooms.values()) {
+      if ((room.maker.user_id === userId || room.taker.user_id === userId) && !['SETTLED', 'CLOSED'].includes(room.status)) {
+        activeRoom = room;
+        break;
+      }
+    }
+
     const [rows] = await pool.query(
       `SELECT t.trade_id, t.buyer_user_id, t.seller_user_id,
-              t.buyer_asset_fraction AS qty, t.unit_price, t.total_amount, t.timestamp,
-              a.symbol, a.name AS asset_name,
-              bu.username AS to_username, su.username AS from_username
+              t.buyer_asset_fraction AS maker_gets_qty,
+              t.seller_asset_fraction AS maker_gives_qty,
+              t.total_amount, t.timestamp,
+              ba.symbol AS maker_gets_symbol,
+              sa.symbol AS maker_gives_symbol,
+              bu.username AS maker_username,
+              su.username AS taker_username
        FROM trade t
-       JOIN assets a ON t.buyer_asset_id = a.asset_id
+       JOIN assets ba ON t.buyer_asset_id = ba.asset_id
+       JOIN assets sa ON t.seller_asset_id = sa.asset_id
        JOIN users bu ON t.buyer_user_id = bu.user_id
        JOIN users su ON t.seller_user_id = su.user_id
-       WHERE t.buyer_user_id IS NOT NULL
-         AND t.seller_user_id IS NOT NULL
-         AND t.buyer_user_id <> t.seller_user_id
-         AND (t.buyer_user_id = ? OR t.seller_user_id = ?)
+       WHERE t.seller_user_id IS NOT NULL
+         AND t.buyer_user_id IS NOT NULL
+         AND t.seller_user_id <> t.buyer_user_id
+         AND (t.seller_user_id = ? OR t.buyer_user_id = ?)
          AND t.trade_status = 'COMPLETED'
        ORDER BY t.timestamp DESC
-       LIMIT 20`,
+       LIMIT 25`,
       [userId, userId]
     );
 
-    const formatted = rows.map((r) => {
-      const isOut = Number(r.seller_user_id) === userId;
+    const history = rows.map((r) => {
+      const isMaker = Number(r.buyer_user_id) === userId;
       return {
         trade_id: r.trade_id,
-        dir: isOut ? 'OUT' : 'IN',
-        symbol: r.symbol,
-        asset_name: r.asset_name,
-        qty: Number(r.qty),
-        unit_price: Number(r.unit_price),
+        gave_qty: Number(isMaker ? r.maker_gives_qty : r.maker_gets_qty),
+        gave_symbol: isMaker ? r.maker_gives_symbol : r.maker_gets_symbol,
+        got_qty: Number(isMaker ? r.maker_gets_qty : r.maker_gives_qty),
+        got_symbol: isMaker ? r.maker_gets_symbol : r.maker_gives_symbol,
+        counterparty: isMaker ? r.taker_username : r.maker_username,
         total_amount: Number(r.total_amount),
-        counterparty: isOut ? r.to_username : r.from_username,
         timestamp: r.timestamp
       };
     });
 
-    res.json(formatted);
+    res.json({ active_room: activeRoom, history });
   } catch (err) {
-    console.error('Asset transfer history error:', err);
-    res.status(500).json({ error: 'Failed to load P2P asset transfers.' });
+    console.error('P2P room fetch error:', err);
+    res.status(500).json({ error: 'Failed to load P2P room.' });
   }
 });
 
-// POST /api/transfers/asset — ACID Peer-to-Peer Asset Transfer
-app.post('/api/transfers/asset', async (req, res) => {
-  const senderId = Number(req.body?.sender_id);
-  const recipientUsername = (req.body?.recipient_username || '').trim();
-  const assetId = Number(req.body?.asset_id);
-  const qty = Number(req.body?.quantity);
+// POST /api/p2p/invite — Step 1: Maker invites Taker
+app.post('/api/p2p/invite', async (req, res) => {
+  const makerId = Number(req.body?.maker_id);
+  const takerUsername = (req.body?.taker_username || '').trim();
+  if (!makerId || !takerUsername) return res.status(400).json({ error: 'Enter recipient username.' });
 
-  if (!senderId || !recipientUsername || !assetId || !Number.isFinite(qty) || qty <= 0) {
-    return res.status(400).json({ error: 'Provide recipient username, asset, and valid quantity.' });
+  try {
+    const [[maker]] = await pool.query('SELECT user_id, username FROM users WHERE user_id = ?', [makerId]);
+    const [tRows] = await pool.query('SELECT user_id, username, account_status FROM users WHERE username = ?', [takerUsername]);
+
+    if (!maker || tRows.length === 0) return res.status(404).json({ error: `User "@${takerUsername}" not found.` });
+    const taker = tRows[0];
+    if (Number(taker.user_id) === makerId) return res.status(400).json({ error: 'Cannot trade with yourself.' });
+    if (taker.account_status !== 'ACTIVE') return res.status(403).json({ error: 'Recipient account is not active.' });
+
+    for (const r of p2pRooms.values()) {
+      if (!['SETTLED', 'CLOSED'].includes(r.status)) {
+        if (r.maker.user_id === makerId || r.taker.user_id === makerId) {
+          return res.status(400).json({ error: 'You already have an active P2P trade room open.' });
+        }
+        if (r.maker.user_id === Number(taker.user_id) || r.taker.user_id === Number(taker.user_id)) {
+          return res.status(400).json({ error: `@${taker.username} is currently in another active P2P trade.` });
+        }
+      }
+    }
+
+    const roomId = ++p2pRoomSeq;
+    const room = {
+      room_id: roomId,
+      status: 'INVITED', // INVITED -> A_BUILDING -> B_REVIEWING -> B_BUILDING -> A_REVIEWING -> SETTLED | CLOSED
+      maker: { user_id: Number(maker.user_id), username: maker.username },
+      taker: { user_id: Number(taker.user_id), username: taker.username },
+      frozen_prices: {},
+      offer_a: null, // { asset_id, symbol, qty, unit_price, total_vc }
+      offer_b: null,
+      last_note: `@${maker.username} invited @${taker.username} to a single-asset trade.`
+    };
+
+    p2pRooms.set(roomId, room);
+    broadcastP2PEvent(room);
+    res.json({ message: `Trade request sent to @${taker.username}`, room });
+  } catch (err) {
+    console.error('P2P invite error:', err);
+    res.status(500).json({ error: 'Failed to send trade request.' });
+  }
+});
+
+// POST /api/p2p/:roomId/respond-invite — Step 2: Taker accepts (locks live prices) or declines
+app.post('/api/p2p/:roomId/respond-invite', async (req, res) => {
+  const roomId = Number(req.params.roomId);
+  const userId = Number(req.body?.user_id);
+  const accept = Boolean(req.body?.accept);
+
+  const room = p2pRooms.get(roomId);
+  if (!room || room.status !== 'INVITED') return res.status(404).json({ error: 'Invite not found or expired.' });
+  if (room.taker.user_id !== userId) return res.status(403).json({ error: 'Only the invited trader can respond.' });
+
+  if (!accept) {
+    room.status = 'CLOSED';
+    room.last_note = `@${room.taker.username} declined the trade request.`;
+    broadcastP2PEvent(room);
+    p2pRooms.delete(roomId);
+    return res.json({ message: 'Trade request declined.', room });
+  }
+
+  try {
+    const [assets] = await pool.query('SELECT asset_id, symbol, current_price FROM assets WHERE is_active = 1');
+    const frozen = {};
+    for (const a of assets) {
+      const live = liveState[a.symbol];
+      frozen[a.symbol] = live && live.price > 0 ? Number(live.price) : Number(a.current_price);
+    }
+
+    room.frozen_prices = frozen;
+    room.status = 'A_BUILDING';
+    room.last_note = `@${room.taker.username} accepted! Prices locked — waiting on @${room.maker.username}'s single-asset offer.`;
+    broadcastP2PEvent(room);
+    res.json({ message: 'Invite accepted! Market prices are now locked.', room });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to lock market prices.' });
+  }
+});
+
+// POST /api/p2p/:roomId/submit-offer — Step 3 / Step 5: Submit 1 asset + qty
+app.post('/api/p2p/:roomId/submit-offer', async (req, res) => {
+  const roomId = Number(req.params.roomId);
+  const userId = Number(req.body?.user_id);
+  const assetId = Number(req.body?.asset_id);
+  const qty = Number(req.body?.qty);
+
+  const room = p2pRooms.get(roomId);
+  if (!room) return res.status(404).json({ error: 'Trade room not found.' });
+
+  const isMaker = room.maker.user_id === userId && room.status === 'A_BUILDING';
+  const isTaker = room.taker.user_id === userId && room.status === 'B_BUILDING';
+  if (!isMaker && !isTaker) return res.status(403).json({ error: 'It is not your turn to submit an offer.' });
+
+  if (!assetId || !Number.isFinite(qty) || qty <= 0) {
+    return res.status(400).json({ error: 'Select 1 asset and enter a valid quantity.' });
+  }
+  if (isTaker && room.offer_a && room.offer_a.asset_id === assetId) {
+    return res.status(400).json({ error: `Select a different asset than ${room.offer_a.symbol}.` });
+  }
+
+  try {
+    const [pRows] = await pool.query(
+      `SELECT p.total_fraction_owned, a.symbol
+       FROM portfolio p
+       JOIN assets a ON p.asset_id = a.asset_id
+       WHERE p.user_id = ? AND p.asset_id = ? LIMIT 1`,
+      [userId, assetId]
+    );
+
+    if (pRows.length === 0 || Number(pRows[0].total_fraction_owned) < qty - 1e-12) {
+      return res.status(400).json({ error: 'Insufficient holdings for that asset.' });
+    }
+
+    const symbol = pRows[0].symbol;
+    const lockedPx = Number(room.frozen_prices[symbol] || 0);
+    if (lockedPx <= 0) return res.status(400).json({ error: 'Locked price unavailable.' });
+
+    const cleanQty = Math.min(qty, Number(pRows[0].total_fraction_owned));
+    const totalVc = Number((cleanQty * lockedPx).toFixed(2));
+
+    // When Taker submits counter-offer, require matched locked value within ±0.50 VC
+    if (isTaker && room.offer_a) {
+      const diff = Math.abs(totalVc - room.offer_a.total_vc);
+      if (diff > 0.50) {
+        return res.status(400).json({
+          error: `Offer (${totalVc.toFixed(2)} VC) must match @${room.maker.username}'s locked value (${room.offer_a.total_vc.toFixed(2)} VC ±0.50 VC).`
+        });
+      }
+    }
+
+    const offerObj = {
+      asset_id: assetId,
+      symbol,
+      qty: cleanQty,
+      unit_price: lockedPx,
+      total_vc: totalVc
+    };
+
+    if (isMaker) {
+      room.offer_a = offerObj;
+      room.status = 'B_REVIEWING';
+      room.last_note = `@${room.maker.username} offered ${cleanQty.toFixed(6)} ${symbol} (${totalVc.toFixed(2)} VC). Waiting on @${room.taker.username}.`;
+    } else {
+      room.offer_b = offerObj;
+      room.status = 'A_REVIEWING';
+      room.last_note = `@${room.taker.username} countered with ${cleanQty.toFixed(6)} ${symbol} (${totalVc.toFixed(2)} VC). Waiting on @${room.maker.username}.`;
+    }
+
+    broadcastP2PEvent(room);
+    res.json({ message: 'Offer submitted and locked!', room });
+  } catch (err) {
+    console.error('Submit offer error:', err);
+    res.status(500).json({ error: 'Failed to submit offer.' });
+  }
+});
+
+// POST /api/p2p/:roomId/review — Step 4 / Step 6 & 7: Accept, Reject, or Leave
+app.post('/api/p2p/:roomId/review', async (req, res) => {
+  const roomId = Number(req.params.roomId);
+  const userId = Number(req.body?.user_id);
+  const decision = req.body?.decision; // 'ACCEPT' | 'REJECT' | 'LEAVE'
+
+  const room = p2pRooms.get(roomId);
+  if (!room) return res.status(404).json({ error: 'Trade room not found.' });
+
+  const isMaker = room.maker.user_id === userId;
+  const isTaker = room.taker.user_id === userId;
+  if (!isMaker && !isTaker) return res.status(403).json({ error: 'Not a participant in this room.' });
+
+  const actor = isMaker ? room.maker.username : room.taker.username;
+
+  if (decision === 'LEAVE') {
+    room.status = 'CLOSED';
+    room.last_note = `@${actor} left the trade room. Trade cancelled.`;
+    broadcastP2PEvent(room);
+    p2pRooms.delete(roomId);
+    return res.json({ message: 'You left the trade room.', room });
+  }
+
+  if (decision === 'REJECT') {
+    if (isTaker && room.status === 'B_REVIEWING') {
+      room.offer_a = null;
+      room.status = 'A_BUILDING';
+      room.last_note = `@${actor} rejected the offer — @${room.maker.username} may revise or leave.`;
+    } else if (isMaker && room.status === 'A_REVIEWING') {
+      room.offer_b = null;
+      room.status = 'B_BUILDING';
+      room.last_note = `@${actor} rejected the counter-offer — @${room.taker.username} may revise or leave.`;
+    } else {
+      return res.status(400).json({ error: 'Cannot reject at this stage.' });
+    }
+    broadcastP2PEvent(room);
+    return res.json({ message: 'Offer rejected.', room });
+  }
+
+  if (decision !== 'ACCEPT') return res.status(400).json({ error: 'Invalid decision.' });
+
+  // Step 4: Taker accepts Maker's offer -> Taker builds single-asset counter-offer
+  if (isTaker && room.status === 'B_REVIEWING') {
+    room.status = 'B_BUILDING';
+    room.last_note = `@${actor} accepted! Now selecting 1 asset worth ${room.offer_a.total_vc.toFixed(2)} VC.`;
+    broadcastP2PEvent(room);
+    return res.json({ message: 'Offer accepted! Now select your single asset to match.', room });
+  }
+
+  // Step 6 & 7: Maker accepts Taker's counter-offer -> ATOMIC 1-ROW SWAP SETTLEMENT
+  if (!(isMaker && room.status === 'A_REVIEWING')) {
+    return res.status(400).json({ error: 'Not ready for final settlement.' });
   }
 
   let conn;
@@ -1288,111 +1519,113 @@ app.post('/api/transfers/asset', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    // 1. Validate recipient
-    const [recRows] = await conn.execute(
-      'SELECT user_id, username, account_status FROM users WHERE username = ? LIMIT 1',
-      [recipientUsername]
-    );
-    if (recRows.length === 0) {
-      await conn.rollback();
-      return res.status(404).json({ error: `User "@${recipientUsername}" not found.` });
-    }
-    const recipient = recRows[0];
-    if (Number(recipient.user_id) === senderId) {
-      await conn.rollback();
-      return res.status(400).json({ error: 'Cannot transfer assets to yourself.' });
-    }
-    if (recipient.account_status !== 'ACTIVE') {
-      await conn.rollback();
-      return res.status(403).json({ error: 'Recipient account is suspended or inactive.' });
-    }
+    const makerId = room.maker.user_id;
+    const takerId = room.taker.user_id;
+    const offA = room.offer_a;
+    const offB = room.offer_b;
 
-    // 2. Lock sender's portfolio holding
-    const [senderPort] = await conn.execute(
+    const [mRows] = await conn.execute(
       'SELECT portfolio_id, total_fraction_owned, total_amount_invested, average_purchase_price FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
-      [senderId, assetId]
+      [makerId, offA.asset_id]
     );
-    if (senderPort.length === 0 || Number(senderPort[0].total_fraction_owned) < qty - 1e-12) {
+    if (mRows.length === 0 || Number(mRows[0].total_fraction_owned) < offA.qty - 1e-12) {
       await conn.rollback();
-      return res.status(400).json({ error: 'Insufficient asset holdings to transfer.' });
+      return res.status(400).json({ error: `@${room.maker.username} no longer holds enough ${offA.symbol}.` });
     }
 
-    const sp = senderPort[0];
-    const ownedQty = Number(sp.total_fraction_owned);
-    const actualQty = Math.min(qty, ownedQty);
-
-    // 3. Get live valuation for ledger record
-    const [assetRows] = await conn.execute(
-      'SELECT asset_id, symbol, current_price FROM assets WHERE asset_id = ? LIMIT 1',
-      [assetId]
+    const [tRows] = await conn.execute(
+      'SELECT portfolio_id, total_fraction_owned, total_amount_invested, average_purchase_price FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
+      [takerId, offB.asset_id]
     );
-    const asset = assetRows[0];
-    const live = liveState[asset.symbol];
-    const unitPrice = live && live.price > 0 ? live.price : Number(asset.current_price);
-    const notionalValue = Number((actualQty * unitPrice).toFixed(2));
-
-    // Proportional cost basis moved from sender to recipient
-    const transferRatio = ownedQty > 0 ? actualQty / ownedQty : 0;
-    const transferredBasis = Number((Number(sp.total_amount_invested) * transferRatio).toFixed(2));
-
-    // 4. Deduct from sender's portfolio
-    const remQty = Math.max(0, ownedQty - actualQty);
-    const remInvested = remQty < 1e-12 ? 0 : Math.max(0, Number((Number(sp.total_amount_invested) - transferredBasis).toFixed(2)));
-    const remAvg = remQty < 1e-12 ? 0 : Number(sp.average_purchase_price);
-
-    await conn.execute(
-      `UPDATE portfolio
-       SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ?
-       WHERE user_id = ? AND portfolio_id = ?`,
-      [remQty < 1e-12 ? 0 : remQty, remInvested, remAvg, senderId, sp.portfolio_id]
-    );
-
-    // 5. Credit recipient's portfolio (upsert)
-    const [recPort] = await conn.execute(
-      'SELECT portfolio_id, total_fraction_owned, total_amount_invested FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
-      [recipient.user_id, assetId]
-    );
-
-    if (recPort.length > 0) {
-      const rp = recPort[0];
-      const newRecQty = Number(rp.total_fraction_owned) + actualQty;
-      const newRecInv = Number(rp.total_amount_invested) + transferredBasis;
-      const newRecAvg = newRecQty > 0 ? newRecInv / newRecQty : unitPrice;
-
-      await conn.execute(
-        `UPDATE portfolio
-         SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ?
-         WHERE user_id = ? AND portfolio_id = ?`,
-        [newRecQty, newRecInv, newRecAvg, recipient.user_id, rp.portfolio_id]
-      );
-    } else {
-      const [[{ nextId }]] = await conn.execute(
-        'SELECT COALESCE(MAX(portfolio_id), 0) + 1 AS nextId FROM portfolio WHERE user_id = ?',
-        [recipient.user_id]
-      );
-      const initAvg = actualQty > 0 ? transferredBasis / actualQty : unitPrice;
-      await conn.execute(
-        `INSERT INTO portfolio (user_id, portfolio_id, asset_id, total_fraction_owned, total_amount_invested, average_purchase_price)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [recipient.user_id, nextId, assetId, actualQty, transferredBasis, initAvg]
-      );
+    if (tRows.length === 0 || Number(tRows[0].total_fraction_owned) < offB.qty - 1e-12) {
+      await conn.rollback();
+      return res.status(400).json({ error: `@${room.taker.username} no longer holds enough ${offB.symbol}.` });
     }
 
-    // 6. Log P2P transfer in immutable `trade` ledger
+    async function debitPortfolio(row, uid, qtyToDeduct) {
+      const owned = Number(row.total_fraction_owned);
+      const actual = Math.min(qtyToDeduct, owned);
+      const ratio = owned > 0 ? actual / owned : 0;
+      const remQty = Math.max(0, owned - actual);
+      const remInv = remQty < 1e-12 ? 0 : Number((Number(row.total_amount_invested) * (1 - ratio)).toFixed(2));
+      const remAvg = remQty < 1e-12 ? 0 : Number(row.average_purchase_price);
+
+      await conn.execute(
+        'UPDATE portfolio SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ? WHERE user_id = ? AND portfolio_id = ?',
+        [remQty < 1e-12 ? 0 : remQty, remInv, remAvg, uid, row.portfolio_id]
+      );
+      return actual;
+    }
+
+    async function creditPortfolio(uid, assetId, qtyToAdd, unitPrice, notional) {
+      const [existing] = await conn.execute(
+        'SELECT portfolio_id, total_fraction_owned, total_amount_invested FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
+        [uid, assetId]
+      );
+      if (existing.length > 0) {
+        const p = existing[0];
+        const nQty = Number(p.total_fraction_owned) + qtyToAdd;
+        const nInv = Number((Number(p.total_amount_invested) + notional).toFixed(2));
+        const nAvg = nQty > 0 ? Number((nInv / nQty).toFixed(4)) : unitPrice;
+        await conn.execute(
+          'UPDATE portfolio SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ? WHERE user_id = ? AND portfolio_id = ?',
+          [nQty, nInv, nAvg, uid, p.portfolio_id]
+        );
+      } else {
+        const [[{ nextId }]] = await conn.execute(
+          'SELECT COALESCE(MAX(portfolio_id), 0) + 1 AS nextId FROM portfolio WHERE user_id = ?',
+          [uid]
+        );
+        await conn.execute(
+          'INSERT INTO portfolio (user_id, portfolio_id, asset_id, total_fraction_owned, total_amount_invested, average_purchase_price) VALUES (?, ?, ?, ?, ?, ?)',
+          [uid, nextId, assetId, qtyToAdd, notional, unitPrice]
+        );
+      }
+    }
+
+    const actualMakerGave = await debitPortfolio(mRows[0], makerId, offA.qty);
+    const actualTakerGave = await debitPortfolio(tRows[0], takerId, offB.qty);
+
+    await creditPortfolio(takerId, offA.asset_id, actualMakerGave, offA.unit_price, offA.total_vc);
+    await creditPortfolio(makerId, offB.asset_id, actualTakerGave, offB.unit_price, offB.total_vc);
+
     await conn.execute(
       `INSERT INTO trade (buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETED')`,
-      [recipient.user_id, senderId, assetId, assetId, actualQty, actualQty, unitPrice, notionalValue]
+      [makerId, takerId, offB.asset_id, offA.asset_id, actualTakerGave, actualMakerGave, offB.unit_price, offA.total_vc]
     );
 
+    // Log P2P asset swap in both users' wallet_history so it appears on Wallets ledger
+    const [[mWallet]] = await conn.execute('SELECT wallet_id, balance FROM wallets WHERE user_id = ?', [makerId]);
+    const [[tWallet]] = await conn.execute('SELECT wallet_id, balance FROM wallets WHERE user_id = ?', [takerId]);
+
+    if (mWallet) {
+      await conn.execute(
+        `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+         VALUES (?, 'TRANSFER_OUT', 0.00, ?, ?)`,
+        [mWallet.wallet_id, Number(mWallet.balance), `P2P Swap with @${room.taker.username}: Gave ${actualMakerGave.toFixed(6)} ${offA.symbol} ⇄ Got ${actualTakerGave.toFixed(6)} ${offB.symbol} (${offA.total_vc.toFixed(2)} VC value)`]
+      );
+    }
+    if (tWallet) {
+      await conn.execute(
+        `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+         VALUES (?, 'TRANSFER_IN', 0.00, ?, ?)`,
+        [tWallet.wallet_id, Number(tWallet.balance), `Swap @${room.taker.username.split('@')[0]}: ${Number(actualMakerGave.toFixed(4))} ${offA.symbol} ⇄ ${Number(actualTakerGave.toFixed(4))} ${offB.symbol} (${offA.total_vc.toFixed(2)} VC)`]
+      );
+    }
+
     await conn.commit();
-    res.json({
-      message: `Transferred ${actualQty.toFixed(6)} ${asset.symbol} to @${recipient.username}`
-    });
+
+    room.status = 'SETTLED';
+    room.last_note = `Swap settled: ${actualMakerGave.toFixed(6)} ${offA.symbol} ⇄ ${actualTakerGave.toFixed(6)} ${offB.symbol}`;
+    broadcastP2PEvent(room);
+    p2pRooms.delete(roomId);
+
+    res.json({ message: 'Single-asset P2P swap settled!', room });
   } catch (err) {
     if (conn) await conn.rollback();
-    console.error('Asset transfer error:', err);
-    res.status(500).json({ error: 'Asset transfer failed.' });
+    console.error('P2P settle error:', err);
+    res.status(500).json({ error: 'Swap settlement failed.' });
   } finally {
     if (conn) conn.release();
   }
@@ -1488,6 +1721,519 @@ app.get('/api/portfolio/:userId', async (req, res) => {
   } catch (err) {
     console.error('Portfolio load error:', err);
     res.status(500).json({ error: 'Failed to load portfolio.' });
+  }
+});
+
+// API: Wallets, Central Credit Pool & Immutable Ledger Overview
+app.get('/api/wallets/:userId/overview', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
+
+  try {
+    const [[wallet]] = await pool.query(
+      'SELECT wallet_id, balance, last_updated FROM wallets WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
+    if (!wallet) return res.status(404).json({ error: 'Wallet not found.' });
+
+    // Portfolio valuation for 50% LTV borrow capacity
+    const [portRows] = await pool.query(
+      `SELECT symbol, total_fraction_owned, total_amount_invested, current_price
+       FROM portfolio_valuation_view
+       WHERE user_id = ?`,
+      [userId]
+    );
+
+    let portfolioValue = 0;
+    let totalInvested = 0;
+    for (const r of portRows) {
+      const live = liveState[r.symbol];
+      const px = live && live.price > 0 ? live.price : Number(r.current_price);
+      portfolioValue += Number(r.total_fraction_owned) * px;
+      totalInvested += Number(r.total_amount_invested);
+    }
+
+    // Total central pool liquidity available to borrow
+    const [[poolRow]] = await pool.query(
+      `SELECT COALESCE(SUM(available_amount), 0) AS pool_liquidity
+       FROM lending
+       WHERE lending_status IN ('OPEN', 'PARTIALLY_FUNDED')`
+    );
+
+    // User's active lending positions
+    const [myLends] = await pool.query(
+      `SELECT lending_id, principal_amount, available_amount, interest_rate, term_days, lending_status, created_at
+       FROM lending
+       WHERE lender_id = ? AND lending_status IN ('OPEN', 'PARTIALLY_FUNDED', 'FULLY_FUNDED')
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    // User's active loans
+    const [myLoans] = await pool.query(
+      `SELECT loan_id, lender_id, lending_id, principal_amount, interest_rate, term_days,
+              total_repayment, amount_paid, loan_status, start_date, due_date, created_at
+       FROM loans
+       WHERE borrower_id = ? AND loan_status IN ('APPROVED', 'ACTIVE')
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    const activeDebt = myLoans.reduce(
+      (sum, l) => sum + Math.max(0, Number(l.principal_amount) - Number(l.amount_paid)),
+      0
+    );
+    const activeLent = myLends.reduce((sum, l) => sum + Number(l.principal_amount), 0);
+    const borrowCapacity = Math.max(0, portfolioValue * 0.5 - activeDebt);
+
+    // Immutable wallet history
+    const [history] = await pool.query(
+      `SELECT timestamp, transaction_type, transacted_amount, balance_after, description
+       FROM wallet_history
+       WHERE wallet_id = ?
+       ORDER BY timestamp DESC
+       LIMIT 100`,
+      [wallet.wallet_id]
+    );
+
+    res.json({
+      wallet_id: wallet.wallet_id,
+      balance: Number(wallet.balance),
+      last_updated: wallet.last_updated,
+      total_invested: Number(totalInvested.toFixed(2)),
+      portfolio_value: Number(portfolioValue.toFixed(2)),
+      pool_liquidity: Number(poolRow.pool_liquidity || 0),
+      active_debt: Number(activeDebt.toFixed(2)),
+      active_lent: Number(activeLent.toFixed(2)),
+      borrow_capacity: Number(borrowCapacity.toFixed(2)),
+      lends: myLends.map((l) => ({
+        lending_id: l.lending_id,
+        principal_amount: Number(l.principal_amount),
+        available_amount: Number(l.available_amount),
+        interest_rate: Number(l.interest_rate),
+        term_days: l.term_days,
+        lending_status: l.lending_status,
+        created_at: l.created_at
+      })),
+      loans: myLoans.map((l) => ({
+        loan_id: l.loan_id,
+        principal_amount: Number(l.principal_amount),
+        interest_rate: Number(l.interest_rate),
+        term_days: l.term_days,
+        total_repayment: Number(l.total_repayment),
+        amount_paid: Number(l.amount_paid),
+        loan_status: l.loan_status,
+        start_date: l.start_date,
+        due_date: l.due_date,
+        created_at: l.created_at
+      })),
+      history: history.map((h) => ({
+        timestamp: h.timestamp,
+        transaction_type: h.transaction_type,
+        transacted_amount: Number(h.transacted_amount),
+        balance_after: h.balance_after !== null ? Number(h.balance_after) : null,
+        description: h.description
+      }))
+    });
+  } catch (err) {
+    console.error('Wallets overview error:', err);
+    res.status(500).json({ error: 'Failed to load wallet overview.' });
+  }
+});
+
+// POST /api/transfers/cash — ACID Peer-to-Peer VC Transfer
+app.post('/api/transfers/cash', async (req, res) => {
+  const senderId = Number(req.body?.sender_id);
+  const recipientUsername = (req.body?.recipient_username || '').trim();
+  const amount = Number(req.body?.amount);
+  const note = (req.body?.note || '').trim();
+
+  if (!senderId || !recipientUsername || !Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Provide recipient username and a valid VC amount.' });
+  }
+
+  const cleanAmt = Number(amount.toFixed(2));
+  if (cleanAmt <= 0) return res.status(400).json({ error: 'Amount must be at least 0.01 VC.' });
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [senderRows] = await conn.execute(
+      'SELECT user_id, username FROM users WHERE user_id = ? LIMIT 1',
+      [senderId]
+    );
+    const [recRows] = await conn.execute(
+      'SELECT user_id, username, account_status FROM users WHERE username = ? LIMIT 1',
+      [recipientUsername]
+    );
+
+    if (senderRows.length === 0 || recRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: `User "@${recipientUsername}" not found.` });
+    }
+    const sender = senderRows[0];
+    const recipient = recRows[0];
+
+    if (Number(recipient.user_id) === senderId) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Cannot transfer VC to yourself.' });
+    }
+    if (recipient.account_status !== 'ACTIVE') {
+      await conn.rollback();
+      return res.status(403).json({ error: 'Recipient account is not active.' });
+    }
+
+    // Lock both wallets in ascending user_id order to prevent deadlocks
+    const firstId = Math.min(senderId, Number(recipient.user_id));
+    const secondId = Math.max(senderId, Number(recipient.user_id));
+    const [walletRows] = await conn.execute(
+      'SELECT wallet_id, user_id, balance FROM wallets WHERE user_id IN (?, ?) ORDER BY user_id ASC FOR UPDATE',
+      [firstId, secondId]
+    );
+
+    const senderWallet = walletRows.find((w) => Number(w.user_id) === senderId);
+    const recWallet = walletRows.find((w) => Number(w.user_id) === Number(recipient.user_id));
+
+    if (!senderWallet || !recWallet) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Wallet record missing.' });
+    }
+    if (Number(senderWallet.balance) < cleanAmt) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Insufficient wallet balance.' });
+    }
+
+    const newSenderBal = Number((Number(senderWallet.balance) - cleanAmt).toFixed(2));
+    const newRecBal = Number((Number(recWallet.balance) + cleanAmt).toFixed(2));
+
+    await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newSenderBal, senderWallet.wallet_id]);
+    await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newRecBal, recWallet.wallet_id]);
+
+    const suffix = note ? ` (${note})` : '';
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'TRANSFER_OUT', ?, ?, ?)`,
+      [senderWallet.wallet_id, cleanAmt, newSenderBal, `Sent ${cleanAmt.toFixed(2)} VC to @${recipient.username}${suffix}`]
+    );
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'TRANSFER_IN', ?, ?, ?)`,
+      [recWallet.wallet_id, cleanAmt, newRecBal, `Received ${cleanAmt.toFixed(2)} VC from @${sender.username}${suffix}`]
+    );
+
+    await conn.commit();
+    res.json({
+      message: `Transferred ${cleanAmt.toFixed(2)} VC to @${recipient.username}`,
+      new_balance: newSenderBal
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Cash transfer error:', err);
+    res.status(500).json({ error: 'Cash transfer failed.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /api/pool/lend — Supply idle VC to Central Credit Pool (6% p.a.)
+app.post('/api/pool/lend', async (req, res) => {
+  const userId = Number(req.body?.user_id);
+  const amount = Number(req.body?.amount);
+  if (!userId || !Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Enter a valid amount to lend.' });
+  }
+
+  const cleanAmt = Number(amount.toFixed(2));
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [wRows] = await conn.execute(
+      'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [userId]
+    );
+    if (wRows.length === 0 || Number(wRows[0].balance) < cleanAmt) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Insufficient wallet balance.' });
+    }
+
+    const wallet = wRows[0];
+    const newBal = Number((Number(wallet.balance) - cleanAmt).toFixed(2));
+
+    await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newBal, wallet.wallet_id]);
+    await conn.execute(
+      `INSERT INTO lending (lender_id, principal_amount, available_amount, interest_rate, term_days, lending_status, description)
+       VALUES (?, ?, ?, 6.000, 30, 'OPEN', 'Central Credit Pool Supply')`,
+      [userId, cleanAmt, cleanAmt]
+    );
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'LENDING', ?, ?, ?)`,
+      [wallet.wallet_id, cleanAmt, newBal, `Supplied ${cleanAmt.toFixed(2)} VC to Central Credit Pool @ 6% p.a.`]
+    );
+
+    await conn.commit();
+    res.json({ message: `Supplied ${cleanAmt.toFixed(2)} VC to Central Credit Pool at 6% p.a.`, new_balance: newBal });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Pool lend error:', err);
+    res.status(500).json({ error: 'Failed to supply liquidity.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /api/pool/redeem — Redeem unborrowed pool liquidity + accrued interest
+app.post('/api/pool/redeem', async (req, res) => {
+  const userId = Number(req.body?.user_id);
+  const lendingId = Number(req.body?.lending_id);
+  if (!userId || !lendingId) return res.status(400).json({ error: 'Invalid redeem request.' });
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [lRows] = await conn.execute(
+      'SELECT lending_id, lender_id, principal_amount, available_amount, interest_rate, lending_status, created_at FROM lending WHERE lending_id = ? FOR UPDATE',
+      [lendingId]
+    );
+    if (lRows.length === 0 || Number(lRows[0].lender_id) !== userId) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Lending position not found.' });
+    }
+
+    const lend = lRows[0];
+    const avail = Number(lend.available_amount);
+    if (avail <= 0 || !['OPEN', 'PARTIALLY_FUNDED'].includes(lend.lending_status)) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Funds are currently borrowed and awaiting repayment.' });
+    }
+
+    const days = Math.max(0, (Date.now() - new Date(lend.created_at).getTime()) / 86400000);
+    const interest = avail * (Number(lend.interest_rate) / 100) * (days / 365);
+    const payout = Number((avail + interest).toFixed(2));
+
+    const [wRows] = await conn.execute('SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE', [userId]);
+    const wallet = wRows[0];
+    const newBal = Number((Number(wallet.balance) + payout).toFixed(2));
+
+    const nextStatus = avail < Number(lend.principal_amount) ? 'FULLY_FUNDED' : 'CLOSED';
+    await conn.execute('UPDATE lending SET available_amount = 0, lending_status = ? WHERE lending_id = ?', [nextStatus, lendingId]);
+    await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newBal, wallet.wallet_id]);
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'DEPOSIT', ?, ?, ?)`,
+      [wallet.wallet_id, payout, newBal, `Redeemed ${payout.toFixed(2)} VC from Credit Pool (incl. interest)`]
+    );
+
+    await conn.commit();
+    res.json({ message: `Redeemed ${payout.toFixed(2)} VC from Central Credit Pool`, new_balance: newBal });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Pool redeem error:', err);
+    res.status(500).json({ error: 'Failed to redeem liquidity.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /api/pool/borrow — Borrow from Central Credit Pool against 50% Portfolio LTV (12% p.a.)
+app.post('/api/pool/borrow', async (req, res) => {
+  const userId = Number(req.body?.user_id);
+  const amount = Number(req.body?.amount);
+  if (!userId || !Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Enter a valid amount to borrow.' });
+  }
+
+  const reqAmt = Number(amount.toFixed(2));
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // 1. Check 50% LTV limit against live portfolio valuation
+    const [portRows] = await conn.execute(
+      'SELECT symbol, total_fraction_owned, current_price FROM portfolio_valuation_view WHERE user_id = ?',
+      [userId]
+    );
+    let portfolioValue = 0;
+    for (const r of portRows) {
+      const live = liveState[r.symbol];
+      const px = live && live.price > 0 ? live.price : Number(r.current_price);
+      portfolioValue += Number(r.total_fraction_owned) * px;
+    }
+
+    const [[debtRow]] = await conn.execute(
+      `SELECT COALESCE(SUM(principal_amount - amount_paid), 0) AS active_debt
+       FROM loans
+       WHERE borrower_id = ? AND loan_status IN ('APPROVED', 'ACTIVE')`,
+      [userId]
+    );
+    const maxCap = Math.max(0, portfolioValue * 0.5 - Number(debtRow.active_debt || 0));
+    if (reqAmt > maxCap + 0.01) {
+      await conn.rollback();
+      return res.status(400).json({ error: `Exceeds 50% portfolio LTV limit. Max borrow: ${maxCap.toFixed(2)} VC.` });
+    }
+
+    // 2. Lock open pool offers (excluding borrower's own offers) in FIFO order
+    const [offers] = await conn.execute(
+      `SELECT lending_id, lender_id, available_amount, term_days
+       FROM lending
+       WHERE lending_status IN ('OPEN', 'PARTIALLY_FUNDED')
+         AND available_amount > 0
+         AND lender_id <> ?
+       ORDER BY created_at ASC
+       FOR UPDATE`,
+      [userId]
+    );
+
+    const totalAvail = offers.reduce((s, o) => s + Number(o.available_amount), 0);
+    if (totalAvail < reqAmt - 0.01) {
+      await conn.rollback();
+      return res.status(400).json({ error: `Insufficient external pool liquidity (${totalAvail.toFixed(2)} VC available).` });
+    }
+
+    let remaining = reqAmt;
+    for (const offer of offers) {
+      if (remaining <= 0.001) break;
+      const take = Math.min(remaining, Number(offer.available_amount));
+      const newAvail = Number((Number(offer.available_amount) - take).toFixed(2));
+      const newStatus = newAvail <= 0 ? 'FULLY_FUNDED' : 'PARTIALLY_FUNDED';
+
+      await conn.execute(
+        'UPDATE lending SET available_amount = ?, lending_status = ? WHERE lending_id = ?',
+        [newAvail, newStatus, offer.lending_id]
+      );
+
+      const termDays = offer.term_days || 30;
+      const rate = 12.0;
+      const totalRepay = Number((take * (1 + (rate / 100) * (termDays / 365))).toFixed(2));
+
+      await conn.execute(
+        `INSERT INTO loans (borrower_id, lender_id, lending_id, principal_amount, interest_rate, term_days, total_repayment, amount_paid, loan_status, start_date, due_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0.00, 'ACTIVE', CURDATE(), DATE_ADD(CURDATE(), INTERVAL ? DAY))`,
+        [userId, offer.lender_id, offer.lending_id, take, rate, termDays, totalRepay, termDays]
+      );
+
+      remaining = Number((remaining - take).toFixed(2));
+    }
+
+    // 3. Credit borrower's wallet
+    const [wRows] = await conn.execute('SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE', [userId]);
+    const wallet = wRows[0];
+    const newBal = Number((Number(wallet.balance) + reqAmt).toFixed(2));
+
+    await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newBal, wallet.wallet_id]);
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'LOAN_DISBURSEMENT', ?, ?, ?)`,
+      [wallet.wallet_id, reqAmt, newBal, `Borrowed ${reqAmt.toFixed(2)} VC from Central Credit Pool @ 12% p.a.`]
+    );
+
+    await conn.commit();
+    res.json({ message: `Loan approved: ${reqAmt.toFixed(2)} VC disbursed at 12% p.a.`, new_balance: newBal });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Pool borrow error:', err);
+    res.status(500).json({ error: 'Loan request failed.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /api/pool/repay — Repay an active loan + accrued interest
+app.post('/api/pool/repay', async (req, res) => {
+  const userId = Number(req.body?.user_id);
+  const loanId = Number(req.body?.loan_id);
+  if (!userId || !loanId) return res.status(400).json({ error: 'Invalid repayment request.' });
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [loanRows] = await conn.execute(
+      `SELECT loan_id, borrower_id, lender_id, lending_id, principal_amount, interest_rate,
+              total_repayment, amount_paid, loan_status, created_at
+       FROM loans
+       WHERE loan_id = ?
+       FOR UPDATE`,
+      [loanId]
+    );
+    if (loanRows.length === 0 || Number(loanRows[0].borrower_id) !== userId) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Active loan not found.' });
+    }
+
+    const loan = loanRows[0];
+    if (!['APPROVED', 'ACTIVE'].includes(loan.loan_status)) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Loan is already settled.' });
+    }
+
+    const days = Math.max(0, (Date.now() - new Date(loan.created_at).getTime()) / 86400000);
+    const accruedPayoff = Number(
+      (Number(loan.principal_amount) * (1 + (Number(loan.interest_rate) / 100) * (days / 365)) - Number(loan.amount_paid)).toFixed(2)
+    );
+    const dueNow = Math.max(0.01, Math.min(accruedPayoff, Number((Number(loan.total_repayment) - Number(loan.amount_paid)).toFixed(2))));
+
+    // Lock borrower & lender wallets in ascending user_id order
+    const lenderId = Number(loan.lender_id);
+    const ids = lenderId && lenderId !== userId ? [Math.min(userId, lenderId), Math.max(userId, lenderId)] : [userId];
+    const [wRows] = await conn.execute(
+      `SELECT wallet_id, user_id, balance FROM wallets WHERE user_id IN (${ids.map(() => '?').join(',')}) ORDER BY user_id ASC FOR UPDATE`,
+      ids
+    );
+
+    const bWallet = wRows.find((w) => Number(w.user_id) === userId);
+    const lWallet = lenderId ? wRows.find((w) => Number(w.user_id) === lenderId) : null;
+
+    if (!bWallet || Number(bWallet.balance) < dueNow) {
+      await conn.rollback();
+      return res.status(400).json({ error: `Insufficient balance. Payoff due: ${dueNow.toFixed(2)} VC.` });
+    }
+
+    const newBorrowerBal = Number((Number(bWallet.balance) - dueNow).toFixed(2));
+    await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newBorrowerBal, bWallet.wallet_id]);
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'LOAN_REPAYMENT', ?, ?, ?)`,
+      [bWallet.wallet_id, dueNow, newBorrowerBal, `Repaid Loan #${loanId} (${dueNow.toFixed(2)} VC incl. interest)`]
+    );
+
+    if (lWallet) {
+      const newLenderBal = Number((Number(lWallet.balance) + dueNow).toFixed(2));
+      await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newLenderBal, lWallet.wallet_id]);
+      await conn.execute(
+        `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+         VALUES (?, 'DEPOSIT', ?, ?, ?)`,
+        [lWallet.wallet_id, dueNow, newLenderBal, `Credit Pool loan repayment received (+${dueNow.toFixed(2)} VC)`]
+      );
+    }
+
+    const newPaid = Number((Number(loan.amount_paid) + dueNow).toFixed(2));
+    await conn.execute(
+      'UPDATE loans SET amount_paid = ?, total_repayment = ?, loan_status = \'REPAID\' WHERE loan_id = ?',
+      [newPaid, newPaid, loanId]
+    );
+    await conn.execute(
+      `INSERT INTO loan_payments (loan_id, amount, payment_status)
+       VALUES (?, ?, 'COMPLETED')`,
+      [loanId, dueNow]
+    );
+
+    await conn.commit();
+    res.json({ message: `Repaid ${dueNow.toFixed(2)} VC — Loan #${loanId} settled`, new_balance: newBorrowerBal });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Pool repay error:', err);
+    res.status(500).json({ error: 'Loan repayment failed.' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

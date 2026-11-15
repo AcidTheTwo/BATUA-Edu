@@ -58,8 +58,8 @@
       <!-- Top Asset Selector & Quick Jump -->
       <div class="page-header-row">
         <div>
-          <h1 class="page-title">Asset Terminal &amp; P2P Transfers</h1>
-          <p class="page-subtitle">Inspect live price history, execute spot orders, or send fractional units directly to another trader.</p>
+          <h1 class="page-title">Asset Terminal &amp; P2P Trade Room</h1>
+          <p class="page-subtitle">Inspect live price history, execute spot orders, or negotiate multi-asset two-way swaps.</p>
         </div>
         <div style="min-width:15rem;">
           <select id="asset-switcher" class="input" onchange="switchAsset(this.value)">
@@ -122,27 +122,27 @@
             </div>
           </div>
 
-          <!-- Recent P2P Asset Transfers Ledger -->
+          <!-- Settled Two-Way P2P Asset Transfers Ledger -->
           <div class="card p-5">
             <div class="flex items-center justify-between mb-3">
-              <h3 class="font-semibold text-white">Recent P2P Asset Transfers</h3>
-              <span class="text-11 text-slate-500">Peer-to-peer ledger</span>
+              <h3 class="font-semibold text-white">Settled Two-Way P2P Asset Transfers</h3>
+              <span class="text-11 text-slate-500">Normalized trade ledger</span>
             </div>
             <div id="p2p-history" class="space-y-3">
-              <p class="text-xs text-slate-500">Loading P2P asset transfers...</p>
+              <p class="text-xs text-slate-500">Loading P2P trade history...</p>
             </div>
           </div>
         </div>
 
-        <!-- Right Column: Position Summary + Spot Trade + P2P Asset Transfer -->
+        <!-- Right Column: Position Summary + Spot Trade + Two-Way P2P Trade Room -->
         <div class="space-y-4">
           <!-- Your Position Card -->
-          <div class="card p-5 space-y-2">
-            <div class="flex justify-between text-xs">
-              <span class="text-slate-400">Available Wallet</span>
-              <span id="p-wallet" class="font-semibold text-white">0.00 VC</span>
+          <div class="card p-5">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-slate-400">Available Wallet</span>
+              <span id="p-wallet" class="text-sm font-bold text-white">0.00 VC</span>
             </div>
-            <div id="p-position-box" class="pt-2" style="border-top:1px solid var(--border-color);">
+            <div id="p-position-box" class="sub-box">
               <p class="text-xs text-slate-500">Loading position...</p>
             </div>
           </div>
@@ -157,35 +157,15 @@
             <div id="trade-body"></div>
           </div>
 
-          <!-- Peer-to-Peer Asset Transfer Card -->
-          <div class="card p-5">
-            <h3 class="font-semibold text-white">Send Asset (P2P Transfer)</h3>
-            <p class="text-xs text-slate-500 mt-1 mb-4">Transfer fractional units of <span id="t-sym-label" class="text-white font-semibold">this asset</span> to another trader.</p>
-
-            <div class="space-y-3">
-              <div>
-                <label class="text-xs text-slate-400">Recipient Username</label>
-                <div class="flex gap-2 mt-1">
-                  <input id="p2p-user" class="input" placeholder="e.g. meera" oninput="resetRecipient()">
-                  <button id="p2p-verify-btn" type="button" class="btn btn-ghost shrink-0" onclick="verifyRecipient()">Verify</button>
-                </div>
-                <div id="p2p-confirm" class="mt-2"></div>
-              </div>
-
-              <div>
-                <div class="flex justify-between items-center">
-                  <label class="text-xs text-slate-400">Quantity to send</label>
-                  <button id="p2p-max-btn" type="button" class="range-btn" style="display:none;" onclick="fillMaxTransfer()">Max</button>
-                </div>
-                <input id="p2p-qty" class="input mt-1" type="number" min="0" step="any" placeholder="e.g. 0.05" oninput="updateTransferEst()">
-              </div>
-
-              <div class="sub-box text-xs flex justify-between">
-                <span class="text-slate-500">Estimated value</span>
-                <span id="p2p-est" class="font-semibold text-white">&mdash;</span>
-              </div>
-
-              <button id="p2p-send-btn" type="button" class="btn btn-primary btn-full" onclick="sendAssetTransfer()">Send Asset Transfer</button>
+          <!-- Single-Asset Step-by-Step P2P Trade Room Card -->
+          <div class="card p-5" id="p2p-room-card">
+            <div class="flex items-center justify-between mb-1">
+              <h3 class="font-semibold text-white">P2P Trade Room</h3>
+              <span id="p2p-stage-badge" class="badge badge-sky">NEW REQUEST</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">Invite a trader, lock live prices, and negotiate a 1-asset swap.</p>
+            <div id="p2p-room-body">
+              <p class="text-xs text-slate-500">Loading trade room...</p>
             </div>
           </div>
         </div>
@@ -219,7 +199,6 @@
     var orderInputMode = 'VC';
     var currentWallet = Number(user.balance || 0);
     var currentPosition = null;
-    var verifiedRecipient = null;
     var assetChart = null;
 
     function money(n, d) {
@@ -235,7 +214,7 @@
     function showToast(msg, variant, durationMs) {
       var type = variant === true ? 'sell' : (variant || 'info');
       var duration = durationMs || 4000;
-      var titleMap = { buy: 'Buy Executed', sell: 'Sell Executed', info: 'Notice' };
+      var titleMap = { buy: 'Confirmed', sell: 'Executed', info: 'Notice' };
 
       var box = document.getElementById('toasts');
       var el = document.createElement('div');
@@ -304,7 +283,6 @@
 
         renderAssetHeader();
         renderTradeForm();
-        updateTransferEst();
 
         await Promise.all([
           loadAssetChart(),
@@ -320,7 +298,6 @@
       document.title = currentAsset.symbol + ' · BATUA-Edu';
       document.getElementById('a-name').textContent = currentAsset.name;
       document.getElementById('a-symbol-tag').textContent = currentAsset.symbol;
-      document.getElementById('t-sym-label').textContent = currentAsset.symbol;
 
       var typeEl = document.getElementById('a-type');
       typeEl.textContent = currentAsset.asset_type;
@@ -407,31 +384,30 @@
         user.balance = currentWallet;
         localStorage.setItem('batua_user', JSON.stringify(user));
 
-        document.getElementById('p-wallet').textContent = money(currentWallet) + ' VC';
-        var box = document.getElementById('p-position-box');
-        var maxTransferBtn = document.getElementById('p2p-max-btn');
+        var walletEl = document.getElementById('p-wallet');
+        if (walletEl) walletEl.textContent = money(currentWallet) + ' VC';
 
-        if (!currentPosition) {
-          box.innerHTML = '<p class="text-xs text-slate-500">You do not currently hold any ' + currentAsset.symbol + '.</p>';
-          maxTransferBtn.style.display = 'none';
-        } else {
-          maxTransferBtn.style.display = 'inline-block';
-          maxTransferBtn.textContent = 'Max (' + Number(currentPosition.qty).toFixed(6) + ')';
-          box.innerHTML =
-            '<div class="flex justify-between text-xs mb-1">' +
-              '<span class="text-slate-400">Your Holdings</span>' +
-              '<span class="font-semibold text-white">' + Number(currentPosition.qty).toFixed(6) + ' ' + currentAsset.symbol + '</span>' +
-            '</div>' +
-            '<div class="flex justify-between text-xs mb-1">' +
-              '<span class="text-slate-400">Amount Invested</span>' +
-              '<span class="text-slate-200">' + money(currentPosition.invested) + ' VC (Avg ' + money(currentPosition.avg_price) + ')</span>' +
-            '</div>' +
-            '<div class="flex justify-between text-xs">' +
-              '<span class="text-slate-400">Current Value &amp; P&amp;L</span>' +
-              '<span class="font-semibold ' + plCls(currentPosition.pl) + '">' +
-                money(currentPosition.current_value) + ' VC (' + (currentPosition.pl >= 0 ? '+' : '') + money(currentPosition.pl) + ')' +
-              '</span>' +
-            '</div>';
+        var box = document.getElementById('p-position-box');
+        if (box) {
+          if (!currentPosition) {
+            box.innerHTML = '<p class="text-xs text-slate-500">You do not currently hold any ' + currentAsset.symbol + '.</p>';
+          } else {
+            box.innerHTML =
+              '<div class="flex justify-between text-xs mb-1">' +
+                '<span class="text-slate-400">Your Holdings</span>' +
+                '<span class="font-semibold text-white">' + Number(currentPosition.qty).toFixed(6) + ' ' + currentAsset.symbol + '</span>' +
+              '</div>' +
+              '<div class="flex justify-between text-xs mb-1">' +
+                '<span class="text-slate-400">Amount Invested</span>' +
+                '<span class="text-slate-200">' + money(currentPosition.invested) + ' VC (Avg ' + money(currentPosition.avg_price) + ')</span>' +
+              '</div>' +
+              '<div class="flex justify-between text-xs">' +
+                '<span class="text-slate-400">Current Value &amp; P&amp;L</span>' +
+                '<span class="font-semibold ' + plCls(currentPosition.pl) + '">' +
+                  money(currentPosition.current_value) + ' VC (' + (currentPosition.pl >= 0 ? '+' : '') + money(currentPosition.pl) + ')' +
+                '</span>' +
+              '</div>';
+          }
         }
         renderTradeForm();
       } catch (err) {
@@ -574,7 +550,7 @@
         if (!res.ok) throw new Error(data.error || 'Order failed.');
 
         showToast(data.message, tradeMode === 'BUY' ? 'buy' : 'sell', 4000);
-        await loadPosition();
+        await Promise.all([loadPosition(), loadUserHoldingsForP2P()]);
       } catch (err) {
         msgBox.textContent = err.message;
         msgBox.className = 'sub-box text-xs text-loss mb-3';
@@ -585,112 +561,46 @@
       }
     }
 
-    // Peer-to-Peer Asset Transfer Logic
-    function resetRecipient() {
-      verifiedRecipient = null;
-      document.getElementById('p2p-confirm').innerHTML = '';
-    }
+   // Option 2: Single-Asset Step-by-Step P2P Negotiation Room
+    var activeRoom = null;
+    var userHoldings = [];
 
-    async function verifyRecipient() {
-      var uname = document.getElementById('p2p-user').value.trim();
-      var confirmBox = document.getElementById('p2p-confirm');
-      if (!uname) return showToast('Enter a recipient username first.', 'info');
-
-      var btn = document.getElementById('p2p-verify-btn');
-      btn.disabled = true;
-      btn.textContent = '...';
-
+    async function loadUserHoldingsForP2P() {
       try {
-        var res = await fetch('/api/users/verify/' + encodeURIComponent(uname) + '?exclude=' + user.user_id);
+        var res = await fetch('/api/portfolio/' + user.user_id);
         var data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'User not found');
-
-        verifiedRecipient = data;
-        confirmBox.innerHTML = '<div class="confirm-box">&check; Confirmed: ' + data.full_name + ' (@' + data.username + ')</div>';
-      } catch (err) {
-        verifiedRecipient = null;
-        confirmBox.innerHTML = '<div class="sub-box text-xs text-loss">' + err.message + '</div>';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Verify';
-      }
-    }
-
-    function fillMaxTransfer() {
-      if (!currentPosition) return;
-      document.getElementById('p2p-qty').value = Number(currentPosition.qty);
-      updateTransferEst();
-    }
-
-    function updateTransferEst() {
-      var qty = Number(document.getElementById('p2p-qty').value);
-      var px = currentAsset ? Number(currentAsset.current_price || 0) : 0;
-      document.getElementById('p2p-est').textContent = qty > 0 && px > 0 ? money(qty * px) + ' VC' : '—';
-    }
-
-    async function sendAssetTransfer() {
-      if (!currentAsset) return;
-      if (!verifiedRecipient) return showToast('Verify the recipient username first.', 'info');
-
-      var qty = Number(document.getElementById('p2p-qty').value);
-      if (!qty || qty <= 0) return showToast('Enter a valid quantity to send.', 'info');
-
-      var btn = document.getElementById('p2p-send-btn');
-      btn.disabled = true;
-      btn.textContent = 'Sending...';
-
-      try {
-        var res = await fetch('/api/transfers/asset', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sender_id: user.user_id,
-            recipient_username: verifiedRecipient.username,
-            asset_id: currentAsset.asset_id,
-            quantity: qty
-          })
-        });
-        var data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Transfer failed.');
-
-        showToast(data.message, 'sell', 4000);
-        document.getElementById('p2p-qty').value = '';
-        updateTransferEst();
-        await Promise.all([loadPosition(), loadTransferHistory()]);
-      } catch (err) {
-        showToast(err.message, 'info');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Send Asset Transfer';
-      }
+        userHoldings = data.holdings || [];
+      } catch (_) {}
     }
 
     async function loadTransferHistory() {
       try {
-        var res = await fetch('/api/transfers/asset/' + user.user_id);
-        var list = await res.json();
-        var box = document.getElementById('p2p-history');
+        await loadUserHoldingsForP2P();
+        var res = await fetch('/api/p2p/rooms/' + user.user_id);
+        var data = await res.json();
+        activeRoom = data.active_room;
+        renderP2PRoom();
 
+        var list = data.history || [];
+        var box = document.getElementById('p2p-history');
         if (!list.length) {
-          box.innerHTML = '<p class="text-xs text-slate-500">No P2P asset transfers yet.</p>';
+          box.innerHTML = '<p class="text-xs text-slate-500">No settled single-asset P2P swaps yet.</p>';
           return;
         }
 
         box.innerHTML = list.map(function (t) {
-          var isOut = t.dir === 'OUT';
           return '<div class="flex items-center justify-between text-xs pb-2" style="border-bottom:1px solid var(--border-color);">' +
             '<div>' +
               '<p class="text-sm font-semibold text-white">' +
-                Number(t.qty).toFixed(6) + ' ' + t.symbol +
-                '<span class="dir-badge ' + (isOut ? 'dir-out' : 'dir-in') + '">' + t.dir + '</span>' +
+                Number(t.gave_qty).toFixed(6) + ' ' + t.gave_symbol +
+                ' <span class="text-slate-400">&rlarr;</span> ' +
+                Number(t.got_qty).toFixed(6) + ' ' + t.got_symbol +
               '</p>' +
-              '<p class="text-11 text-slate-500 mt-0-5">' +
-                (isOut ? 'Sent to @' : 'Received from @') + t.counterparty + ' &middot; ' + fmtTime(t.timestamp) +
-              '</p>' +
+              '<p class="text-11 text-slate-500 mt-0-5">Swapped with @' + t.counterparty + ' &middot; ' + fmtTime(t.timestamp) + '</p>' +
             '</div>' +
             '<div class="text-right">' +
               '<p class="font-medium text-slate-200">' + money(t.total_amount) + ' VC</p>' +
-              '<p class="text-10 text-slate-500">@ ' + money(t.unit_price) + '</p>' +
+              '<p class="text-10 text-slate-500">Locked value</p>' +
             '</div>' +
           '</div>';
         }).join('');
@@ -699,7 +609,238 @@
       }
     }
 
-    // Live SSE price streaming
+    function updateSingleOfferEstimate() {
+      if (!activeRoom) return;
+      var sel = document.getElementById('offer-asset-sel');
+      var qty = Number(document.getElementById('offer-asset-qty')?.value || 0);
+      var estEl = document.getElementById('offer-total-vc');
+      if (!sel || !estEl) return;
+
+      var sym = sel.options[sel.selectedIndex]?.getAttribute('data-sym') || '';
+      var px = Number(activeRoom.frozen_prices[sym] || 0);
+      estEl.textContent = (qty > 0 && px > 0) ? money(qty * px) + ' VC' : '0.00 VC';
+    }
+
+    function autoMatchTargetQty() {
+      if (!activeRoom || !activeRoom.offer_a) return;
+      var sel = document.getElementById('offer-asset-sel');
+      var qtyInp = document.getElementById('offer-asset-qty');
+      if (!sel || !qtyInp) return;
+
+      var sym = sel.options[sel.selectedIndex]?.getAttribute('data-sym') || '';
+      var px = Number(activeRoom.frozen_prices[sym] || 0);
+      if (px > 0) {
+        qtyInp.value = (activeRoom.offer_a.total_vc / px).toFixed(6);
+        updateSingleOfferEstimate();
+      }
+    }
+
+    function renderP2PRoom() {
+      var badge = document.getElementById('p2p-stage-badge');
+      var body = document.getElementById('p2p-room-body');
+      if (!badge || !body) return;
+
+      if (!activeRoom) {
+        badge.textContent = 'NEW REQUEST';
+        body.innerHTML =
+          '<div class="space-y-3">' +
+            '<div>' +
+              '<label class="text-xs text-slate-400">Trader Username</label>' +
+              '<input id="invite-user" class="input mt-1" placeholder="e.g. meera">' +
+            '</div>' +
+            '<button type="button" class="btn btn-primary btn-full" onclick="sendTradeInvite()">Send Trade Request</button>' +
+          '</div>';
+        return;
+      }
+
+      var isMaker = activeRoom.maker.user_id === user.user_id;
+      var peerName = isMaker ? activeRoom.taker.username : activeRoom.maker.username;
+      badge.textContent = activeRoom.status;
+
+      if (activeRoom.status === 'INVITED') {
+        if (isMaker) {
+          body.innerHTML =
+            '<div class="sub-box text-xs space-y-2">' +
+              '<p class="text-slate-200">Waiting for <strong>@' + peerName + '</strong> to accept your trade request...</p>' +
+              '<p class="text-11 text-slate-500">Live prices will lock the moment they accept.</p>' +
+            '</div>' +
+            '<button type="button" class="btn btn-ghost btn-full mt-3" onclick="reviewOffer(\'LEAVE\')">Cancel Request</button>';
+        } else {
+          body.innerHTML =
+            '<div class="sub-box text-xs space-y-2">' +
+              '<p class="text-slate-200"><strong>@' + peerName + '</strong> invited you to a single-asset trade!</p>' +
+              '<p class="text-11 text-slate-500">Accepting locks live market prices for the negotiation.</p>' +
+            '</div>' +
+            '<div class="grid grid-2 gap-2 mt-3">' +
+              '<button type="button" class="btn btn-gain btn-full" onclick="respondInvite(true)">Accept Request</button>' +
+              '<button type="button" class="btn btn-loss btn-full" onclick="respondInvite(false)">Decline</button>' +
+            '</div>';
+        }
+        return;
+      }
+
+      var myTurnToBuild = (isMaker && activeRoom.status === 'A_BUILDING') || (!isMaker && activeRoom.status === 'B_BUILDING');
+      if (myTurnToBuild) {
+        var targetBanner = !isMaker
+          ? '<div class="confirm-box mb-3">' +
+              '<p class="font-semibold">@' + peerName + ' Offers: ' + Number(activeRoom.offer_a.qty).toFixed(6) + ' ' + activeRoom.offer_a.symbol + '</p>' +
+              '<p class="text-11 mt-1">Select 1 asset worth <strong>' + money(activeRoom.offer_a.total_vc) + ' VC</strong> (±0.50 VC) at locked prices.</p>' +
+            '</div>'
+          : '<p class="text-11 text-slate-400 mb-3">' + activeRoom.last_note + '</p>';
+
+        var eligible = userHoldings.filter(function (h) {
+          return isMaker || !activeRoom.offer_a || Number(h.asset_id) !== Number(activeRoom.offer_a.asset_id);
+        });
+
+        var holdingOpts = eligible.length
+          ? eligible.map(function (h) {
+              var fPx = Number(activeRoom.frozen_prices[h.symbol] || h.unit_price);
+              return '<option value="' + h.asset_id + '" data-sym="' + h.symbol + '">' +
+                h.symbol + ' (Avail: ' + Number(h.qty).toFixed(4) + ' @ ' + money(fPx) + ')' +
+              '</option>';
+            }).join('')
+          : '<option value="">No eligible assets held</option>';
+
+        body.innerHTML =
+          targetBanner +
+          '<div class="space-y-3">' +
+            '<div>' +
+              '<div class="flex justify-between items-center">' +
+                '<label class="text-xs text-slate-400">Select 1 Asset &amp; Quantity</label>' +
+                (!isMaker ? '<button type="button" class="range-btn" onclick="autoMatchTargetQty()">Auto-Match Value</button>' : '') +
+              '</div>' +
+              '<div class="flex gap-2 mt-1">' +
+                '<select id="offer-asset-sel" class="input" onchange="updateSingleOfferEstimate()">' + holdingOpts + '</select>' +
+                '<input id="offer-asset-qty" type="number" min="0" step="any" class="input" style="max-width:7rem;" placeholder="Qty" oninput="updateSingleOfferEstimate()">' +
+              '</div>' +
+            '</div>' +
+            '<div class="sub-box text-xs flex justify-between">' +
+              '<span class="text-slate-500">Locked Offer Value</span>' +
+              '<span id="offer-total-vc" class="font-semibold text-white">0.00 VC</span>' +
+            '</div>' +
+            '<div class="flex gap-2">' +
+              '<button type="button" class="btn btn-primary flex-1" onclick="submitSingleOffer()">Submit Offer</button>' +
+              '<button type="button" class="btn btn-ghost shrink-0" onclick="reviewOffer(\'LEAVE\')">Leave</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      var myTurnToReview = (!isMaker && activeRoom.status === 'B_REVIEWING') || (isMaker && activeRoom.status === 'A_REVIEWING');
+      if (myTurnToReview) {
+        var inc = isMaker ? activeRoom.offer_b : activeRoom.offer_a;
+        var acceptLabel = isMaker ? 'Accept & Settle Swap' : 'Accept & Select My Asset';
+
+        body.innerHTML =
+          '<div class="sub-box text-xs space-y-2 mb-3">' +
+            '<p class="text-slate-400">Offer from <strong>@' + peerName + '</strong> (Locked Prices):</p>' +
+            '<p class="text-sm font-semibold text-white">' + Number(inc.qty).toFixed(6) + ' ' + inc.symbol + ' (' + money(inc.total_vc) + ' VC)</p>' +
+            (isMaker
+              ? '<p class="text-11 text-slate-400">Your Side: <strong>' + Number(activeRoom.offer_a.qty).toFixed(6) + ' ' + activeRoom.offer_a.symbol + '</strong></p>'
+              : '') +
+          '</div>' +
+          '<div class="space-y-2">' +
+            '<button type="button" class="btn btn-gain btn-full" onclick="reviewOffer(\'ACCEPT\')">' + acceptLabel + '</button>' +
+            '<div class="grid grid-2 gap-2">' +
+              '<button type="button" class="btn btn-loss btn-full" onclick="reviewOffer(\'REJECT\')">Reject Offer</button>' +
+              '<button type="button" class="btn btn-ghost btn-full" onclick="reviewOffer(\'LEAVE\')">Leave Trade</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      body.innerHTML =
+        '<div class="sub-box text-xs space-y-2">' +
+          '<p class="text-slate-200">' + activeRoom.last_note + '</p>' +
+          '<p class="text-11 text-slate-500">Waiting on <strong>@' + peerName + '</strong>...</p>' +
+        '</div>' +
+        '<button type="button" class="btn btn-ghost btn-full mt-3" onclick="reviewOffer(\'LEAVE\')">Leave Trade</button>';
+    }
+
+    async function sendTradeInvite() {
+      var uname = (document.getElementById('invite-user')?.value || '').trim();
+      if (!uname) return showToast('Enter a username to invite.', 'info');
+      try {
+        var res = await fetch('/api/p2p/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ maker_id: user.user_id, taker_username: uname })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invite failed');
+        activeRoom = data.room;
+        renderP2PRoom();
+        showToast(data.message, 'buy', 3500);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function respondInvite(accept) {
+      if (!activeRoom) return;
+      try {
+        var res = await fetch('/api/p2p/' + activeRoom.room_id + '/respond-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, accept: accept })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        activeRoom = accept ? data.room : null;
+        renderP2PRoom();
+        showToast(data.message, accept ? 'buy' : 'sell', 3500);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function submitSingleOffer() {
+      if (!activeRoom) return;
+      var assetId = Number(document.getElementById('offer-asset-sel')?.value || 0);
+      var qty = Number(document.getElementById('offer-asset-qty')?.value || 0);
+      if (!assetId || qty <= 0) return showToast('Select an asset and enter a valid quantity.', 'info');
+
+      try {
+        var res = await fetch('/api/p2p/' + activeRoom.room_id + '/submit-offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, asset_id: assetId, qty: qty })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to submit offer');
+        activeRoom = data.room;
+        renderP2PRoom();
+        showToast(data.message, 'buy', 3500);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function reviewOffer(decision) {
+      if (!activeRoom) return;
+      try {
+        var res = await fetch('/api/p2p/' + activeRoom.room_id + '/review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, decision: decision })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Action failed');
+
+        if (decision === 'LEAVE' || data.room.status === 'SETTLED') {
+          activeRoom = null;
+          await Promise.all([loadPosition(), loadTransferHistory()]);
+        } else {
+          activeRoom = data.room;
+          renderP2PRoom();
+        }
+        showToast(data.message, decision === 'ACCEPT' ? 'buy' : 'sell', 4000);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    // Live SSE price streaming & P2P room sync
     var evtSource = new EventSource('/api/stream');
     evtSource.onmessage = function (e) {
       var tick = JSON.parse(e.data);
@@ -708,7 +849,6 @@
       currentAsset.current_price = tick.current_price;
       currentAsset.price_change = tick.price_change;
       renderAssetHeader();
-      updateTransferEst();
 
       if (assetChart && assetChart.data.datasets[0].data.length > 0) {
         var arr = assetChart.data.datasets[0].data;
@@ -716,6 +856,21 @@
         assetChart.update('none');
       }
     };
+
+    evtSource.addEventListener('p2p', function (e) {
+      var room = JSON.parse(e.data);
+      if (room.maker.user_id !== user.user_id && room.taker.user_id !== user.user_id) return;
+
+      if (room.status === 'SETTLED' || room.status === 'CLOSED') {
+        activeRoom = null;
+        showToast(room.last_note, room.status === 'SETTLED' ? 'buy' : 'sell', 4000);
+        loadPosition();
+        loadTransferHistory();
+      } else {
+        activeRoom = room;
+        loadUserHoldingsForP2P().then(renderP2PRoom);
+      }
+    });
 
     initPage();
   </script>

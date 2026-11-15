@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wallets &amp; Credit Pool &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">B</div>
+      <span class="brand-text">BATUA<span>-Edu</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="markets.html" class="nav-link">Markets</a>
+      <a href="portfolio.html" class="nav-link">My Portfolio</a>
+      <a href="wallets.html" class="nav-link active">Wallets</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+      <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="sidebar-footer">Educational platform &middot; No real money</div>
+  </aside>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
+    </div>
+    <div class="topbar-right">
+      <div class="user-menu" tabindex="0">
+        <div class="user-meta">
+          <p class="user-meta-name" id="user-name">Loading...</p>
+          <p class="user-meta-sub" id="user-role">user</p>
+        </div>
+        <div class="avatar" id="user-avatar">U</div>
+        <div class="user-dropdown">
+          <div class="user-dropdown-panel">
+            <a href="profile.html" class="dropdown-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profile
+            </a>
+            <button id="logout" type="button" class="dropdown-item dropdown-item-danger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="container">
+      <div class="page-header">
+        <h1 class="page-title">Wallets, P2P Trade Room &amp; Credit Pool</h1>
+        <p class="page-subtitle" id="wallet-sub">Loading wallet metadata...</p>
+      </div>
+
+      <!-- 4 Top KPI Cards -->
+      <div class="grid sm-grid-2 xl-grid-4 gap-4">
+        <div class="card p-5">
+          <p class="stat-label">Available Balance</p>
+          <p class="stat-value" id="k-bal">0.00 VC</p>
+          <p class="text-xs mt-1 text-slate-500">Liquid trading cash</p>
+        </div>
+        <div class="card p-5">
+          <p class="stat-label">Central Pool Liquidity</p>
+          <p class="stat-value" id="k-pool">0.00 VC</p>
+          <p class="text-xs mt-1 text-slate-500">Lend 6% p.a. &middot; Borrow 12% p.a.</p>
+        </div>
+        <div class="card p-5">
+          <p class="stat-label">Outstanding Debt</p>
+          <p class="stat-value" id="k-debt">0.00 VC</p>
+          <p class="text-xs mt-1 text-slate-500" id="k-cap">Borrow capacity: 0.00 VC</p>
+        </div>
+        <div class="card p-5">
+          <p class="stat-label">Supplied to Pool</p>
+          <p class="stat-value" id="k-lent">0.00 VC</p>
+          <p class="text-xs mt-1 text-slate-500" id="k-inv">Portfolio basis: 0.00 VC</p>
+        </div>
+      </div>
+
+      <!-- Action Row: Two-Way P2P Trade Room + Central Credit Pool -->
+      <div class="grid lg-grid-3 gap-4 mt-4">
+        <!-- Single-Asset Step-by-Step P2P Trade Room Card -->
+          <div class="card p-5" id="p2p-room-card">
+            <div class="flex items-center justify-between mb-1">
+              <h3 class="font-semibold text-white">P2P Trade Room</h3>
+              <span id="p2p-stage-badge" class="badge badge-sky">NEW REQUEST</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">Invite a trader, lock live prices, and negotiate a 1-asset swap.</p>
+            <div id="p2p-room-body">
+              <p class="text-xs text-slate-500">Loading trade room...</p>
+            </div>
+          </div>
+
+        <!-- Central Credit Pool (Lend & Borrow) -->
+        <div class="card p-5 lg-col-span-2">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div>
+              <h3 class="font-semibold text-white">Central Credit Pool</h3>
+              <p class="text-xs text-slate-500 mt-0-5">50% portfolio LTV limit &middot; Supply at 6% p.a. &middot; Borrow at 12% p.a.</p>
+            </div>
+          </div>
+
+          <div class="grid md-grid-2 gap-4">
+            <!-- Supply / Lend Column -->
+            <div class="sub-box p-4">
+              <p class="text-xs font-semibold text-white uppercase tracking-wide mb-2">Supply Liquidity (Earn 6% p.a.)</p>
+              <div class="flex gap-2">
+                <input id="pool-lend-amt" class="input" type="number" min="1" step="any" placeholder="Amount (VC)">
+                <button id="pool-lend-btn" type="button" class="btn btn-primary shrink-0" onclick="supplyToPool()">Supply</button>
+              </div>
+              <p class="text-11 text-slate-500 mt-2">Redeem unborrowed liquidity + accrued interest anytime.</p>
+
+              <p class="text-11 font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">My Pool Supplies</p>
+              <div id="my-lends" class="space-y-2">
+                <p class="text-xs text-slate-500">None yet.</p>
+              </div>
+            </div>
+
+            <!-- Borrow Column -->
+            <div class="sub-box p-4">
+              <p class="text-xs font-semibold text-white uppercase tracking-wide mb-2">Borrow Against Portfolio (12% p.a.)</p>
+              <div class="flex gap-2">
+                <input id="pool-borrow-amt" class="input" type="number" min="1" step="any" placeholder="Amount (VC)">
+                <button id="pool-borrow-btn" type="button" class="btn btn-primary shrink-0" onclick="borrowFromPool()">Borrow</button>
+              </div>
+              <p class="text-11 text-slate-500 mt-2" id="borrow-hint">Max borrow = 50% of portfolio value minus active debt.</p>
+
+              <p class="text-11 font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">My Active Loans</p>
+              <div id="my-loans" class="space-y-2">
+                <p class="text-xs text-slate-500">No active loans.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Immutable Wallet Ledger -->
+      <div class="card mt-4">
+        <div class="px-5 pt-4 pb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="font-semibold text-white">Past Wallet Transactions</h3>
+            <p class="text-11 text-slate-500">Take a look at your past transactions from your wallet</p>
+          </div>
+          <div id="ledger-chips" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div class="table-wrap">
+          <table class="min-w-820">
+            <thead>
+              <tr>
+                <th class="th">Type</th>
+                <th class="th">Description</th>
+                <th class="th text-right">Amount (VC)</th>
+                <th class="th text-right">Balance After</th>
+                <th class="th">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-body">
+              <tr><td colspan="5" class="td text-center text-slate-500">Loading wallet ledger...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="toasts" class="toast-container"></div>
+
+  <script>
+    var user;
+    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { user = null; }
+    if (!user) { window.location.replace('auth.html?mode=login'); }
+
+    if (user.role === 'admin') {
+      document.getElementById('admin-link').style.display = 'block';
+    }
+    document.getElementById('logout').onclick = function () {
+      localStorage.removeItem('batua_user');
+      window.location.href = 'index.html';
+    };
+    document.getElementById('user-name').textContent = user.full_name || user.username;
+    document.getElementById('user-role').textContent = '@' + user.username + ' · ' + user.role;
+    document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'U')[0].toUpperCase();
+
+    var walletData = { balance: 0, pool_liquidity: 0, active_debt: 0, active_lent: 0, borrow_capacity: 0, lends: [], loans: [], history: [] };
+    var activeFilter = 'ALL';
+    var FILTERS = ['ALL', 'TRADES', 'TRANSFERS', 'POOL_LOANS'];
+
+    function money(n, d) {
+      d = d === undefined ? 2 : d;
+      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function fmtTime(ts) {
+      return new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function showToast(msg, variant, durationMs) {
+      var type = variant === true ? 'sell' : (variant || 'info');
+      var duration = durationMs || 4000;
+      var titleMap = { buy: 'Confirmed', sell: 'Executed', info: 'Notice' };
+
+      var box = document.getElementById('toasts');
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.style.setProperty('--toast-duration', duration + 'ms');
+
+      el.innerHTML =
+        '<div class="toast-body">' +
+          '<p class="toast-title">' + (titleMap[type] || 'Notice') + '</p>' +
+          '<p class="text-slate-200">' + msg + '</p>' +
+        '</div>' +
+        '<button type="button" class="toast-close" aria-label="Close">&times;</button>' +
+        '<div class="toast-progress"></div>';
+
+      var closed = false;
+      function dismiss() {
+        if (closed) return;
+        closed = true;
+        el.classList.add('closing');
+        setTimeout(function () { el.remove(); }, 220);
+      }
+
+      el.querySelector('.toast-close').onclick = dismiss;
+      box.appendChild(el);
+      setTimeout(dismiss, duration);
+    }
+
+    async function loadWalletsOverview() {
+      try {
+        var res = await fetch('/api/wallets/' + user.user_id + '/overview');
+        if (!res.ok) throw new Error('Failed to load wallet data');
+        walletData = await res.json();
+
+        user.balance = walletData.balance;
+        localStorage.setItem('batua_user', JSON.stringify(user));
+
+        document.getElementById('wallet-sub').textContent =
+          'Wallet #' + walletData.wallet_id + ' · Last updated ' + fmtTime(walletData.last_updated);
+
+        document.getElementById('k-bal').textContent = money(walletData.balance) + ' VC';
+        document.getElementById('k-pool').textContent = money(walletData.pool_liquidity) + ' VC';
+        document.getElementById('k-debt').textContent = money(walletData.active_debt) + ' VC';
+        document.getElementById('k-cap').textContent = 'Borrow capacity: ' + money(walletData.borrow_capacity) + ' VC';
+        document.getElementById('k-lent').textContent = money(walletData.active_lent) + ' VC';
+        document.getElementById('k-inv').textContent = 'Portfolio value: ' + money(walletData.portfolio_value) + ' VC';
+        document.getElementById('borrow-hint').textContent =
+          'Available capacity: ' + money(walletData.borrow_capacity) + ' VC (50% of ' + money(walletData.portfolio_value) + ' VC portfolio).';
+
+        renderPoolLists();
+        renderFilterChips();
+        renderLedger();
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    function renderPoolLists() {
+      var lendsBox = document.getElementById('my-lends');
+      if (!walletData.lends.length) {
+        lendsBox.innerHTML = '<p class="text-xs text-slate-500">No active pool deposits.</p>';
+      } else {
+        lendsBox.innerHTML = walletData.lends.map(function (l) {
+          var canRedeem = l.available_amount > 0;
+          return '<div class="card p-3 flex items-center justify-between gap-2">' +
+            '<div>' +
+              '<p class="text-xs font-semibold text-white">' + money(l.principal_amount) + ' VC @ ' + l.interest_rate + '%</p>' +
+              '<p class="text-11 text-slate-500">Unborrowed: ' + money(l.available_amount) + ' VC &middot; ' + l.lending_status + '</p>' +
+            '</div>' +
+            (canRedeem
+              ? '<button type="button" class="btn btn-ghost btn-sm" onclick="redeemPool(' + l.lending_id + ')">Redeem</button>'
+              : '<span class="badge badge-sky">Lent Out</span>') +
+          '</div>';
+        }).join('');
+      }
+
+      var loansBox = document.getElementById('my-loans');
+      if (!walletData.loans.length) {
+        loansBox.innerHTML = '<p class="text-xs text-slate-500">No active loans.</p>';
+      } else {
+        loansBox.innerHTML = walletData.loans.map(function (l) {
+          var days = Math.max(0, (Date.now() - new Date(l.created_at).getTime()) / 86400000);
+          var payoff = l.principal_amount * (1 + (l.interest_rate / 100) * (days / 365)) - l.amount_paid;
+          return '<div class="card p-3 flex items-center justify-between gap-2">' +
+            '<div>' +
+              '<p class="text-xs font-semibold text-white">Loan #' + l.loan_id + ': ' + money(l.principal_amount) + ' VC @ ' + l.interest_rate + '%</p>' +
+              '<p class="text-11 text-slate-500">Due ' + (l.due_date ? String(l.due_date).slice(0, 10) : '30d') + ' &middot; Payoff &approx; ' + money(Math.max(0, payoff)) + ' VC</p>' +
+            '</div>' +
+            '<button type="button" class="btn btn-gain btn-sm" onclick="repayLoan(' + l.loan_id + ')">Repay</button>' +
+          '</div>';
+        }).join('');
+      }
+    }
+
+    function renderFilterChips() {
+      var labels = { ALL: 'All Entries', TRADES: 'Buy / Sell', TRANSFERS: 'P2P Transfers', POOL_LOANS: 'Credit Pool' };
+      document.getElementById('ledger-chips').innerHTML = FILTERS.map(function (f) {
+        return '<button type="button" class="chip ' + (activeFilter === f ? 'on' : '') + '" onclick="setLedgerFilter(\'' + f + '\')">' + labels[f] + '</button>';
+      }).join('');
+    }
+
+    function setLedgerFilter(f) {
+      activeFilter = f;
+      renderFilterChips();
+      renderLedger();
+    }
+
+    function renderLedger() {
+      var tbody = document.getElementById('ledger-body');
+      var rows = walletData.history.filter(function (h) {
+        if (activeFilter === 'ALL') return true;
+        if (activeFilter === 'TRADES') return ['BUY', 'SELL'].indexOf(h.transaction_type) > -1;
+        if (activeFilter === 'TRANSFERS') return ['TRANSFER_IN', 'TRANSFER_OUT'].indexOf(h.transaction_type) > -1;
+        if (activeFilter === 'POOL_LOANS') return ['LENDING', 'LOAN_DISBURSEMENT', 'LOAN_REPAYMENT', 'DEPOSIT'].indexOf(h.transaction_type) > -1;
+        return true;
+      });
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="td text-center text-slate-500">No ledger entries matching this filter.</td></tr>';
+        return;
+      }
+
+      var credits = ['SELL', 'DEPOSIT', 'TRANSFER_IN', 'LOAN_DISBURSEMENT'];
+      tbody.innerHTML = rows.map(function (h) {
+        var isSwap = Number(h.transacted_amount) === 0 && h.transaction_type.indexOf('TRANSFER') > -1;
+        var isCredit = credits.indexOf(h.transaction_type) > -1;
+        var badgeCls = isSwap ? 'badge-sky' : (isCredit ? 'risk-low' : (h.transaction_type.indexOf('TRANSFER') > -1 ? 'badge-sky' : 'risk-high'));
+        var amtHtml = isSwap
+          ? '<span class="text-slate-300">0.00 (Asset Swap)</span>'
+          : '<span class="' + (isCredit ? 'text-gain' : 'text-loss') + '">' + (isCredit ? '+' : '-') + money(h.transacted_amount) + '</span>';
+
+        return '<tr>' +
+          '<td class="td"><span class="badge ' + badgeCls + '">' + (isSwap ? 'P2P SWAP' : h.transaction_type) + '</span></td>' +
+          '<td class="td text-slate-200">' + (h.description || '—') + '</td>' +
+          '<td class="td text-right font-semibold">' + amtHtml + '</td>' +
+          '<td class="td text-right text-slate-300">' + (h.balance_after !== null ? money(h.balance_after) + ' VC' : '—') + '</td>' +
+          '<td class="td text-slate-500 text-xs">' + fmtTime(h.timestamp) + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    // Option 2: Single-Asset Step-by-Step P2P Negotiation Room
+    var activeRoom = null;
+    var userHoldings = [];
+
+    async function loadP2PState() {
+      try {
+        var [portRes, roomRes] = await Promise.all([
+          fetch('/api/portfolio/' + user.user_id),
+          fetch('/api/p2p/rooms/' + user.user_id)
+        ]);
+        var portData = await portRes.json();
+        var roomData = await roomRes.json();
+        userHoldings = portData.holdings || [];
+        activeRoom = roomData.active_room;
+        renderP2PRoom();
+      } catch (_) {}
+    }
+
+    function updateSingleOfferEstimate() {
+      if (!activeRoom) return;
+      var sel = document.getElementById('offer-asset-sel');
+      var qty = Number(document.getElementById('offer-asset-qty')?.value || 0);
+      var estEl = document.getElementById('offer-total-vc');
+      if (!sel || !estEl) return;
+
+      var sym = sel.options[sel.selectedIndex]?.getAttribute('data-sym') || '';
+      var px = Number(activeRoom.frozen_prices[sym] || 0);
+      estEl.textContent = (qty > 0 && px > 0) ? money(qty * px) + ' VC' : '0.00 VC';
+    }
+
+    function autoMatchTargetQty() {
+      if (!activeRoom || !activeRoom.offer_a) return;
+      var sel = document.getElementById('offer-asset-sel');
+      var qtyInp = document.getElementById('offer-asset-qty');
+      if (!sel || !qtyInp) return;
+
+      var sym = sel.options[sel.selectedIndex]?.getAttribute('data-sym') || '';
+      var px = Number(activeRoom.frozen_prices[sym] || 0);
+      if (px > 0) {
+        qtyInp.value = (activeRoom.offer_a.total_vc / px).toFixed(6);
+        updateSingleOfferEstimate();
+      }
+    }
+
+    function renderP2PRoom() {
+      var badge = document.getElementById('p2p-stage-badge');
+      var body = document.getElementById('p2p-room-body');
+      if (!badge || !body) return;
+
+      if (!activeRoom) {
+        badge.textContent = 'NEW REQUEST';
+        body.innerHTML =
+          '<div class="space-y-3">' +
+            '<div>' +
+              '<label class="text-xs text-slate-400">Trader Username</label>' +
+              '<input id="invite-user" class="input mt-1" placeholder="e.g. meera">' +
+            '</div>' +
+            '<button type="button" class="btn btn-primary btn-full" onclick="sendTradeInvite()">Send Trade Request</button>' +
+          '</div>';
+        return;
+      }
+
+      var isMaker = activeRoom.maker.user_id === user.user_id;
+      var peerName = isMaker ? activeRoom.taker.username : activeRoom.maker.username;
+      badge.textContent = activeRoom.status;
+
+      if (activeRoom.status === 'INVITED') {
+        if (isMaker) {
+          body.innerHTML =
+            '<div class="sub-box text-xs space-y-2">' +
+              '<p class="text-slate-200">Waiting for <strong>@' + peerName + '</strong> to accept your trade request...</p>' +
+              '<p class="text-11 text-slate-500">Live prices will lock the moment they accept.</p>' +
+            '</div>' +
+            '<button type="button" class="btn btn-ghost btn-full mt-3" onclick="reviewOffer(\'LEAVE\')">Cancel Request</button>';
+        } else {
+          body.innerHTML =
+            '<div class="sub-box text-xs space-y-2">' +
+              '<p class="text-slate-200"><strong>@' + peerName + '</strong> invited you to a single-asset trade!</p>' +
+              '<p class="text-11 text-slate-500">Accepting locks live market prices for the negotiation.</p>' +
+            '</div>' +
+            '<div class="grid grid-2 gap-2 mt-3">' +
+              '<button type="button" class="btn btn-gain btn-full" onclick="respondInvite(true)">Accept Request</button>' +
+              '<button type="button" class="btn btn-loss btn-full" onclick="respondInvite(false)">Decline</button>' +
+            '</div>';
+        }
+        return;
+      }
+
+      var myTurnToBuild = (isMaker && activeRoom.status === 'A BUILDING') || (!isMaker && activeRoom.status === 'B BUILDING');
+      if (myTurnToBuild) {
+        var targetBanner = !isMaker
+          ? '<div class="confirm-box mb-3">' +
+              '<p class="font-semibold">@' + peerName + ' Offers: ' + Number(activeRoom.offer_a.qty).toFixed(6) + ' ' + activeRoom.offer_a.symbol + '</p>' +
+              '<p class="text-11 mt-1">Select 1 asset worth <strong>' + money(activeRoom.offer_a.total_vc) + ' VC</strong> (±0.50 VC) at locked prices.</p>' +
+            '</div>'
+          : '<p class="text-11 text-slate-400 mb-3">' + activeRoom.last_note + '</p>';
+
+        var eligible = userHoldings.filter(function (h) {
+          return isMaker || !activeRoom.offer_a || Number(h.asset_id) !== Number(activeRoom.offer_a.asset_id);
+        });
+
+        var holdingOpts = eligible.length
+          ? eligible.map(function (h) {
+              var fPx = Number(activeRoom.frozen_prices[h.symbol] || h.unit_price);
+              return '<option value="' + h.asset_id + '" data-sym="' + h.symbol + '">' +
+                h.symbol + ' (Avail: ' + Number(h.qty).toFixed(4) + ' @ ' + money(fPx) + ')' +
+              '</option>';
+            }).join('')
+          : '<option value="">No eligible assets held</option>';
+
+        body.innerHTML =
+          targetBanner +
+          '<div class="space-y-3">' +
+            '<div>' +
+              '<div class="flex justify-between items-center">' +
+                '<label class="text-xs text-slate-400">Select 1 Asset &amp; Quantity</label>' +
+                (!isMaker ? '<button type="button" class="range-btn" onclick="autoMatchTargetQty()">Auto-Match Value</button>' : '') +
+              '</div>' +
+              '<div class="flex gap-2 mt-1">' +
+                '<select id="offer-asset-sel" class="input" onchange="updateSingleOfferEstimate()">' + holdingOpts + '</select>' +
+                '<input id="offer-asset-qty" type="number" min="0" step="any" class="input" style="max-width:7rem;" placeholder="Qty" oninput="updateSingleOfferEstimate()">' +
+              '</div>' +
+            '</div>' +
+            '<div class="sub-box text-xs flex justify-between">' +
+              '<span class="text-slate-500">Locked Offer Value</span>' +
+              '<span id="offer-total-vc" class="font-semibold text-white">0.00 VC</span>' +
+            '</div>' +
+            '<div class="flex gap-2">' +
+              '<button type="button" class="btn btn-primary flex-1" onclick="submitSingleOffer()">Submit Offer</button>' +
+              '<button type="button" class="btn btn-ghost shrink-0" onclick="reviewOffer(\'LEAVE\')">Leave</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      var myTurnToReview = (!isMaker && activeRoom.status === 'B_REVIEWING') || (isMaker && activeRoom.status === 'A_REVIEWING');
+      if (myTurnToReview) {
+        var inc = isMaker ? activeRoom.offer_b : activeRoom.offer_a;
+        var acceptLabel = isMaker ? 'Accept & Settle Swap' : 'Accept & Select My Asset';
+
+        body.innerHTML =
+          '<div class="sub-box text-xs space-y-2 mb-3">' +
+            '<p class="text-slate-400">Offer from <strong>@' + peerName + '</strong> (Locked Prices):</p>' +
+            '<p class="text-sm font-semibold text-white">' + Number(inc.qty).toFixed(6) + ' ' + inc.symbol + ' (' + money(inc.total_vc) + ' VC)</p>' +
+            (isMaker
+              ? '<p class="text-11 text-slate-400">Your Side: <strong>' + Number(activeRoom.offer_a.qty).toFixed(6) + ' ' + activeRoom.offer_a.symbol + '</strong></p>'
+              : '') +
+          '</div>' +
+          '<div class="space-y-2">' +
+            '<button type="button" class="btn btn-gain btn-full" onclick="reviewOffer(\'ACCEPT\')">' + acceptLabel + '</button>' +
+            '<div class="grid grid-2 gap-2">' +
+              '<button type="button" class="btn btn-loss btn-full" onclick="reviewOffer(\'REJECT\')">Reject Offer</button>' +
+              '<button type="button" class="btn btn-ghost btn-full" onclick="reviewOffer(\'LEAVE\')">Leave Trade</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      body.innerHTML =
+        '<div class="sub-box text-xs space-y-2">' +
+          '<p class="text-slate-200">' + activeRoom.last_note + '</p>' +
+          '<p class="text-11 text-slate-500">Waiting on <strong>@' + peerName + '</strong>...</p>' +
+        '</div>' +
+        '<button type="button" class="btn btn-ghost btn-full mt-3" onclick="reviewOffer(\'LEAVE\')">Leave Trade</button>';
+    }
+
+    async function sendTradeInvite() {
+      var uname = (document.getElementById('invite-user')?.value || '').trim();
+      if (!uname) return showToast('Enter a username to invite.', 'info');
+      try {
+        var res = await fetch('/api/p2p/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ maker_id: user.user_id, taker_username: uname })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invite failed');
+        activeRoom = data.room;
+        renderP2PRoom();
+        showToast(data.message, 'buy', 3500);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function respondInvite(accept) {
+      if (!activeRoom) return;
+      try {
+        var res = await fetch('/api/p2p/' + activeRoom.room_id + '/respond-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, accept: accept })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        activeRoom = accept ? data.room : null;
+        renderP2PRoom();
+        showToast(data.message, accept ? 'buy' : 'sell', 3500);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function submitSingleOffer() {
+      if (!activeRoom) return;
+      var assetId = Number(document.getElementById('offer-asset-sel')?.value || 0);
+      var qty = Number(document.getElementById('offer-asset-qty')?.value || 0);
+      if (!assetId || qty <= 0) return showToast('Select an asset and enter a valid quantity.', 'info');
+
+      try {
+        var res = await fetch('/api/p2p/' + activeRoom.room_id + '/submit-offer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, asset_id: assetId, qty: qty })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to submit offer');
+        activeRoom = data.room;
+        renderP2PRoom();
+        showToast(data.message, 'buy', 3500);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function reviewOffer(decision) {
+      if (!activeRoom) return;
+      try {
+        var res = await fetch('/api/p2p/' + activeRoom.room_id + '/review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, decision: decision })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Action failed');
+
+        if (decision === 'LEAVE' || data.room.status === 'SETTLED') {
+          activeRoom = null;
+          await Promise.all([loadWalletsOverview(), loadP2PState()]);
+        } else {
+          activeRoom = data.room;
+          renderP2PRoom();
+        }
+        showToast(data.message, decision === 'ACCEPT' ? 'buy' : 'sell', 4000);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    // Central Credit Pool Actions
+    async function supplyToPool() {
+      var amount = Number(document.getElementById('pool-lend-amt').value);
+      if (!amount || amount <= 0) return showToast('Enter a valid amount to supply.', 'info');
+
+      var btn = document.getElementById('pool-lend-btn');
+      btn.disabled = true;
+
+      try {
+        var res = await fetch('/api/pool/lend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, amount: amount })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to supply liquidity.');
+
+        showToast(data.message, 'buy', 4000);
+        document.getElementById('pool-lend-amt').value = '';
+        await loadWalletsOverview();
+      } catch (err) {
+        showToast(err.message, 'info');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function redeemPool(lendingId) {
+      try {
+        var res = await fetch('/api/pool/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, lending_id: lendingId })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Redeem failed.');
+
+        showToast(data.message, 'buy', 4000);
+        await loadWalletsOverview();
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function borrowFromPool() {
+      var amount = Number(document.getElementById('pool-borrow-amt').value);
+      if (!amount || amount <= 0) return showToast('Enter a valid amount to borrow.', 'info');
+
+      var btn = document.getElementById('pool-borrow-btn');
+      btn.disabled = true;
+
+      try {
+        var res = await fetch('/api/pool/borrow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, amount: amount })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Borrow failed.');
+
+        showToast(data.message, 'buy', 4000);
+        document.getElementById('pool-borrow-amt').value = '';
+        await loadWalletsOverview();
+      } catch (err) {
+        showToast(err.message, 'info');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function repayLoan(loanId) {
+      try {
+        var res = await fetch('/api/pool/repay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.user_id, loan_id: loanId })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Repayment failed.');
+
+        showToast(data.message, 'sell', 4000);
+        await loadWalletsOverview();
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    // Live SSE P2P room sync
+    var evtSource = new EventSource('/api/stream');
+    evtSource.addEventListener('p2p', function (e) {
+      var room = JSON.parse(e.data);
+      if (room.maker.user_id !== user.user_id && room.taker.user_id !== user.user_id) return;
+
+      if (room.status === 'SETTLED' || room.status === 'CLOSED') {
+        activeRoom = null;
+        showToast(room.last_note, room.status === 'SETTLED' ? 'buy' : 'sell', 4000);
+        loadWalletsOverview();
+        loadP2PState();
+      } else {
+        activeRoom = room;
+        loadP2PState();
+      }
+    });
+
+    Promise.all([loadWalletsOverview(), loadP2PState()]);
+  </script>
+</body>
+</html> 
