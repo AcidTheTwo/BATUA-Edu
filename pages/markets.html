@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Markets &middot; BATUA-Edu</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,27 +18,38 @@
       <a href="dashboard.html" class="nav-link">Dashboard</a>
       <a href="markets.html" class="nav-link active">Markets</a>
       <a href="portfolio.html" class="nav-link">My Portfolio</a>
-      <a href="wallet.html" class="nav-link">Wallet</a>
-      <a href="transactions.html" class="nav-link">Transactions</a>
-      <a href="transfers.html" class="nav-link">P2P Transfers</a>
-      <a href="lending.html" class="nav-link">Lending &amp; Borrowing</a>
+      <a href="wallets.html" class="nav-link">Wallets</a>
       <a href="leaderboard.html" class="nav-link">Leaderboard</a>
-      <a href="profile.html" class="nav-link">Profile</a>
-      <a href="auth.html?mode=login" onclick="localStorage.removeItem('batua_user')" class="nav-link">Logout</a>
+      <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
     </nav>
+    <div class="sidebar-footer">Educational platform &middot; No real money</div>
   </aside>
 
   <header class="topbar">
     <div class="topbar-left">
       <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
-      <span class="badge-mock">MOCK PREVIEW</span>
+      <span class="text-xs text-slate-500">Live Markets</span>
     </div>
     <div class="topbar-right">
-      <div class="user-meta">
-        <p class="user-meta-name" id="user-name">Loading...</p>
-        <p class="user-meta-sub" id="user-role">user</p>
+      <div class="user-menu" tabindex="0">
+        <div class="user-meta">
+          <p class="user-meta-name" id="user-name">Loading...</p>
+          <p class="user-meta-sub" id="user-role">user</p>
+        </div>
+        <div class="avatar" id="user-avatar">U</div>
+        <div class="user-dropdown">
+          <div class="user-dropdown-panel">
+            <a href="profile.html" class="dropdown-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profile
+            </a>
+            <button id="logout" type="button" class="dropdown-item dropdown-item-danger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="avatar" id="user-avatar">U</div>
     </div>
   </header>
 
@@ -46,13 +58,20 @@
       <div class="page-header-row">
         <div>
           <h1 class="page-title">Markets</h1>
-          <p class="page-subtitle">Stocks &amp; crypto &middot; prices refresh automatically.</p>
+          <p class="page-subtitle">Click any asset to inspect charts, check your position, and execute trades.</p>
         </div>
-        <span class="badge-mock">SIMULATED DATA</span>
+        <div class="flex items-center gap-2">
+          <input id="lookup-symbol" class="input" style="width:11rem;" placeholder="Add ticker (e.g. SOL)">
+          <select id="lookup-type" class="input" style="width:6.5rem;">
+            <option value="STOCK">Stock</option>
+            <option value="CRYPTO">Crypto</option>
+          </select>
+          <button id="lookup-btn" class="btn btn-primary btn-sm" onclick="lookupAsset()">Find</button>
+        </div>
       </div>
 
       <div class="card p-4 grid md-grid-4 gap-3 mb-4">
-        <input id="f-search" class="input" placeholder="Search name or ticker...">
+        <input id="f-search" class="input" placeholder="Filter listed name or ticker...">
         <select id="f-type" class="input">
           <option value="">All types</option>
           <option value="STOCK">Stocks</option>
@@ -65,11 +84,12 @@
           <option value="HIGH">High</option>
         </select>
         <select id="f-sort" class="input">
-          <option value="name">Sort: Name</option>
+          <option value="featured">Sort: Featured</option>
           <option value="gainers">Biggest gainers</option>
           <option value="losers">Biggest losers</option>
           <option value="price_desc">Price: high &rarr; low</option>
           <option value="price_asc">Price: low &rarr; high</option>
+          <option value="name">Sort: Name</option>
         </select>
       </div>
 
@@ -79,113 +99,210 @@
             <tr>
               <th class="th">Asset</th>
               <th class="th">Type</th>
-              <th class="th text-right">Price</th>
+              <th class="th text-right">Live Price</th>
               <th class="th text-right">24h Change</th>
               <th class="th">Risk</th>
-              <th class="th text-right">Trade</th>
+              <th class="th text-right">Action</th>
             </tr>
           </thead>
-          <tbody id="rows"></tbody>
+          <tbody id="rows">
+            <tr><td colspan="6" class="td text-center text-slate-500">Loading live market feed...</td></tr>
+          </tbody>
         </table>
       </div>
     </div>
   </main>
 
-  <div id="trade-modal" class="modal-backdrop">
-    <div class="card modal-box p-5">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="font-bold text-white" id="modal-title">Trade</h3>
-        <button onclick="closeModal()" class="modal-close">&times;</button>
+  <!-- Right-Side Slide-Over Asset Drawer -->
+  <div id="asset-drawer" class="drawer-backdrop" onclick="if(event.target===this) closeDrawer()">
+    <div class="drawer-panel">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 id="d-symbol" class="text-xl font-extrabold text-white">BTC</h2>
+            <span id="d-type" class="badge type-crypto">CRYPTO</span>
+            <span id="d-risk" class="badge risk-high">HIGH</span>
+          </div>
+          <p id="d-name" class="text-xs text-slate-500 mt-0-5">Bitcoin</p>
+        </div>
+        <button onclick="closeDrawer()" class="modal-close">&times;</button>
       </div>
-      <div class="grid grid-2 gap-2 mb-4">
-        <button id="btn-buy" class="btn btn-gain btn-full">Buy</button>
-        <button id="btn-sell" class="btn btn-ghost btn-full">Sell</button>
+
+      <div class="flex items-baseline justify-between">
+        <p id="d-price" class="text-2xl font-bold text-white">0.00 VC</p>
+        <p id="d-chg" class="text-xs font-semibold text-gain">+0.00%</p>
       </div>
-      <div id="modal-body"></div>
-      <p class="text-10 text-slate-600 mt-4">Mock preview &mdash; no real database. In the full project, this executes a MySQL transaction.</p>
+
+      <!-- Timeframe Selector + Chart -->
+      <div class="card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs text-slate-400 font-semibold">Price History</span>
+          <div class="flex gap-2" id="range-tabs">
+            <button class="range-btn active" data-range="1D" onclick="setRange('1D')">1D</button>
+            <button class="range-btn" data-range="1W" onclick="setRange('1W')">1W</button>
+            <button class="range-btn" data-range="1M" onclick="setRange('1M')">1M</button>
+            <button class="range-btn" data-range="1Y" onclick="setRange('1Y')">1Y</button>
+          </div>
+        </div>
+        <div class="h-56"><canvas id="drawer-chart"></canvas></div>
+      </div>
+
+      <!-- Current Position & Wallet Summary -->
+      <div class="card p-4 space-y-2">
+        <div class="flex justify-between text-xs">
+          <span class="text-slate-400">Available Wallet</span>
+          <span id="d-wallet" class="font-semibold text-sky">0.00 VC</span>
+        </div>
+        <div id="d-position-box" class="pt-2" style="border-top:1px solid var(--border-color);">
+          <p class="text-xs text-slate-500">Checking your position...</p>
+        </div>
+      </div>
+
+      <!-- Buy / Sell Order Ticket -->
+      <div class="card p-4">
+        <div class="grid grid-2 gap-2 mb-4">
+          <button id="btn-buy" type="button" class="btn btn-gain btn-full" onclick="setTradeMode('BUY')">Buy</button>
+          <button id="btn-sell" type="button" class="btn btn-ghost btn-full" onclick="setTradeMode('SELL')">Sell</button>
+        </div>
+        <div id="trade-msg" class="sub-box text-xs mb-3" style="display:none;"></div>
+        <div id="trade-body"></div>
+      </div>
+
+      <div class="text-center mt-1">
+        <a id="d-full-link" href="assets.html" class="link-sky">Open full asset analytics &amp; P2P transfer &rarr;</a>
+      </div>
     </div>
   </div>
 
+  <div id="toasts" class="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script>
-    let user = JSON.parse(localStorage.getItem('batua_user') || 'null');
-    if (!user) { window.location.href = 'auth.html?mode=login'; }
-    else {
-      document.getElementById('user-name').textContent = user.full_name || user.username;
-      document.getElementById('user-role').textContent = '@' + (user.username || 'user') + ' · ' + (user.role || 'user');
-      document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'U')[0].toUpperCase();
+    var user;
+    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { user = null; }
+    if (!user) { window.location.replace('auth.html?mode=login'); }
+
+    if (user.role === 'admin') {
+      document.getElementById('admin-link').style.display = 'block';
     }
+    document.getElementById('logout').onclick = function () {
+      localStorage.removeItem('batua_user');
+      window.location.href = 'index.html';
+    };
+    document.getElementById('user-name').textContent = user.full_name || user.username;
+    document.getElementById('user-role').textContent = '@' + user.username + ' · ' + user.role;
+    document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'U')[0].toUpperCase();
 
-    const ASSETS = [
-      { asset_id: 1, symbol: 'BTC', name: 'Bitcoin', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 67250, change_24h: 2.34 },
-      { asset_id: 2, symbol: 'ETH', name: 'Ethereum', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 3480, change_24h: -1.12 },
-      { asset_id: 3, symbol: 'SOL', name: 'Solana', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 172.4, change_24h: 5.61 },
-      { asset_id: 4, symbol: 'BNB', name: 'BNB Chain', asset_type: 'CRYPTO', risk_level: 'MEDIUM', current_price: 585, change_24h: 0.84 },
-      { asset_id: 5, symbol: 'XRP', name: 'XRP', asset_type: 'CRYPTO', risk_level: 'MEDIUM', current_price: 0.62, change_24h: -3.2 },
-      { asset_id: 6, symbol: 'ADA', name: 'Cardano', asset_type: 'CRYPTO', risk_level: 'MEDIUM', current_price: 0.45, change_24h: 1.45 },
-      { asset_id: 7, symbol: 'DOGE', name: 'Dogecoin', asset_type: 'CRYPTO', risk_level: 'HIGH', current_price: 0.138, change_24h: -6.8 },
-      { asset_id: 8, symbol: 'RELIANCE', name: 'Reliance Industries', asset_type: 'STOCK', risk_level: 'LOW', current_price: 2915, change_24h: 0.42 },
-      { asset_id: 9, symbol: 'TCS', name: 'Tata Consultancy Services', asset_type: 'STOCK', risk_level: 'LOW', current_price: 4120, change_24h: 1.9 },
-      { asset_id: 10, symbol: 'INFY', name: 'Infosys', asset_type: 'STOCK', risk_level: 'LOW', current_price: 1585, change_24h: -0.65 },
-      { asset_id: 11, symbol: 'HDFCBANK', name: 'HDFC Bank', asset_type: 'STOCK', risk_level: 'LOW', current_price: 1490, change_24h: 0.31 },
-      { asset_id: 12, symbol: 'AAPL', name: 'Apple Inc.', asset_type: 'STOCK', risk_level: 'MEDIUM', current_price: 228.5, change_24h: 2.75 },
-      { asset_id: 13, symbol: 'MSFT', name: 'Microsoft Corp.', asset_type: 'STOCK', risk_level: 'LOW', current_price: 415.2, change_24h: 0.98 },
-      { asset_id: 14, symbol: 'GOOGL', name: 'Alphabet Inc.', asset_type: 'STOCK', risk_level: 'MEDIUM', current_price: 178.3, change_24h: -1.85 },
-      { asset_id: 15, symbol: 'TSLA', name: 'Tesla Inc.', asset_type: 'STOCK', risk_level: 'HIGH', current_price: 242.7, change_24h: 4.2 },
-      { asset_id: 16, symbol: 'NVDA', name: 'NVIDIA Corp.', asset_type: 'STOCK', risk_level: 'HIGH', current_price: 131.6, change_24h: -2.4 }
-    ];
+    var allAssets = [];
+    var filteredAssets = [];
+    var selectedAsset = null;
+    var selectedRange = '1D';
+    var tradeMode = 'BUY';
+    var drawerChart = null;
+    var currentWallet = Number(user.balance || 0);
+    var currentPosition = null;
 
-    let list = [...ASSETS];
-    function money(n, d = 2) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+    function money(n, d) {
+      d = d === undefined ? 2 : d;
+      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
     function pct(n) { return (Number(n || 0) >= 0 ? '+' : '') + Number(n || 0).toFixed(2) + '%'; }
     function plCls(n) { return Number(n || 0) >= 0 ? 'text-gain' : 'text-loss'; }
 
-    function render() {
-      const tbody = document.getElementById('rows');
-      if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="td text-center text-slate-500">No assets match your filters.</td></tr>';
+    function showToast(msg, variant, durationMs) {
+      // variant: 'buy' | 'sell' | 'info' (also supports boolean true for backward compatibility)
+      var type = variant === true ? 'sell' : (variant || 'info');
+      var duration = durationMs || 4000;
+
+      var titleMap = {
+        buy: 'Buy Executed',
+        sell: 'Sell Executed',
+        info: 'Notice'
+      };
+
+      var box = document.getElementById('toasts');
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.style.setProperty('--toast-duration', duration + 'ms');
+
+      el.innerHTML =
+        '<div class="toast-body">' +
+          '<p class="toast-title">' + (titleMap[type] || 'Notice') + '</p>' +
+          '<p class="text-slate-200">' + msg + '</p>' +
+        '</div>' +
+        '<button type="button" class="toast-close" aria-label="Close">&times;</button>' +
+        '<div class="toast-progress"></div>';
+
+      var closed = false;
+      function dismiss() {
+        if (closed) return;
+        closed = true;
+        el.classList.add('closing');
+        setTimeout(function () { el.remove(); }, 220);
+      }
+
+      el.querySelector('.toast-close').onclick = dismiss;
+      box.appendChild(el);
+      setTimeout(dismiss, duration);
+    }
+
+    function renderTable() {
+      var tbody = document.getElementById('rows');
+      if (filteredAssets.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="td text-center text-slate-500">No listed assets match your filter. Use the top-right box to look up any ticker.</td></tr>';
         return;
       }
-      tbody.innerHTML = list.map(a => {
-        const riskClass = a.risk_level === 'LOW' ? 'risk-low' : a.risk_level === 'MEDIUM' ? 'risk-medium' : 'risk-high';
-        const typeClass = a.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock';
-        return `
-          <tr>
-            <td class="td">
-              <a href="asset.html?id=${a.asset_id}" class="font-semibold text-white">${a.symbol}</a>
-              <p class="text-11 text-slate-500">${a.name}</p>
-            </td>
-            <td class="td"><span class="badge ${typeClass}">${a.asset_type}</span></td>
-            <td class="td text-right font-medium">${money(a.current_price)} TUA</td>
-            <td class="td text-right font-semibold ${plCls(a.change_24h)}">${pct(a.change_24h)}</td>
-            <td class="td"><span class="badge ${riskClass}">${a.risk_level}</span></td>
-            <td class="td text-right whitespace-nowrap">
-              <button class="btn btn-gain btn-sm mr-2" onclick="openTrade(${a.asset_id}, 'BUY')">Buy</button>
-              <button class="btn btn-loss btn-sm" onclick="openTrade(${a.asset_id}, 'SELL')">Sell</button>
-            </td>
-          </tr>
-        `;
+      tbody.innerHTML = filteredAssets.map(function (a) {
+        var riskClass = a.risk === 'LOW' ? 'risk-low' : a.risk === 'MEDIUM' ? 'risk-medium' : 'risk-high';
+        var typeClass = a.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock';
+        var isSelected = selectedAsset && selectedAsset.asset_id === a.asset_id;
+
+        return '<tr class="clickable-row ' + (isSelected ? 'row-highlight' : '') + '" onclick="openDrawer(' + a.asset_id + ', \'BUY\')">' +
+          '<td class="td">' +
+            '<p class="font-semibold text-white">' + a.symbol + '</p>' +
+            '<p class="text-11 text-slate-500">' + a.name + '</p>' +
+          '</td>' +
+          '<td class="td"><span class="badge ' + typeClass + '">' + a.asset_type + '</span></td>' +
+          '<td id="px-' + a.symbol + '" class="td text-right font-medium">' + money(a.current_price) + ' VC</td>' +
+          '<td id="chg-' + a.symbol + '" class="td text-right font-semibold ' + plCls(a.price_change) + '">' + pct(a.price_change) + '</td>' +
+          '<td class="td"><span class="badge ' + riskClass + '">' + a.risk + '</span></td>' +
+          '<td class="td text-right whitespace-nowrap" onclick="event.stopPropagation()">' +
+            '<button class="btn btn-gain btn-sm mr-2" onclick="openDrawer(' + a.asset_id + ', \'BUY\')">Buy</button>' +
+            '<button class="btn btn-loss btn-sm" onclick="openDrawer(' + a.asset_id + ', \'SELL\')">Sell</button>' +
+          '</td>' +
+        '</tr>';
       }).join('');
     }
 
+    const FEATURED_SYMBOLS = new Set([
+      'BTC', 'ETH', 'SOL', 'USDT',
+      'AAPL', 'GOOGL', 'MSFT', 'TSLA',
+      'NVDA', 'META', 'ASML', 'TSM',
+      'INTC', 'AMD', 'RELIANCE.NS', 'ADANIENT.NS'
+    ]);
+
     function applyFilters() {
-      const s = document.getElementById('f-search').value.toLowerCase();
-      const t = document.getElementById('f-type').value;
-      const r = document.getElementById('f-risk').value;
-      const sort = document.getElementById('f-sort').value;
+      var s = document.getElementById('f-search').value.trim().toLowerCase();
+      var t = document.getElementById('f-type').value;
+      var r = document.getElementById('f-risk').value;
+      var sort = document.getElementById('f-sort').value;
 
-      list = ASSETS.filter(a =>
-        (!s || a.symbol.toLowerCase().includes(s) || a.name.toLowerCase().includes(s)) &&
-        (!t || a.asset_type === t) &&
-        (!r || a.risk_level === r)
-      );
+      filteredAssets = allAssets.filter(function (a) {
+        var matchesFeatured = sort !== 'featured' || FEATURED_SYMBOLS.has(a.symbol.toUpperCase());
+        return matchesFeatured &&
+               (!s || a.symbol.toLowerCase().includes(s) || a.name.toLowerCase().includes(s)) &&
+               (!t || a.asset_type === t) &&
+               (!r || a.risk === r);
+      });
 
-      if (sort === 'gainers') list.sort((a,b) => b.change_24h - a.change_24h);
-      else if (sort === 'losers') list.sort((a,b) => a.change_24h - b.change_24h);
-      else if (sort === 'price_desc') list.sort((a,b) => b.current_price - a.current_price);
-      else if (sort === 'price_asc') list.sort((a,b) => a.current_price - b.current_price);
-      else if (sort === 'name') list.sort((a,b) => a.name.localeCompare(b.name));
+      if (sort === 'gainers') filteredAssets.sort(function (a, b) { return b.price_change - a.price_change; });
+      else if (sort === 'losers') filteredAssets.sort(function (a, b) { return a.price_change - b.price_change; });
+      else if (sort === 'price_desc') filteredAssets.sort(function (a, b) { return b.current_price - a.current_price; });
+      else if (sort === 'price_asc') filteredAssets.sort(function (a, b) { return a.current_price - b.current_price; });
+      else if (sort === 'name') filteredAssets.sort(function (a, b) { return a.name.localeCompare(b.name); });
+      else filteredAssets.sort(function (a, b) { return a.asset_id - b.asset_id; });
 
-      render();
+      renderTable();
     }
 
     document.getElementById('f-search').addEventListener('input', applyFilters);
@@ -193,76 +310,314 @@
     document.getElementById('f-risk').addEventListener('change', applyFilters);
     document.getElementById('f-sort').addEventListener('change', applyFilters);
 
-    let currentAsset = null;
-    let tradeMode = 'BUY';
+    async function loadAssets() {
+      try {
+        var res = await fetch('/api/assets');
+        allAssets = await res.json();
+        applyFilters();
+      } catch (err) {
+        document.getElementById('rows').innerHTML =
+          '<tr><td colspan="6" class="td text-center text-loss">Failed to load assets.</td></tr>';
+      }
+    }
 
-    function openTrade(assetId, mode) {
-      currentAsset = ASSETS.find(a => a.asset_id === assetId);
+    async function lookupAsset() {
+      var symInput = document.getElementById('lookup-symbol');
+      var typeInput = document.getElementById('lookup-type');
+      var btn = document.getElementById('lookup-btn');
+      var sym = symInput.value.trim().toUpperCase();
+      if (!sym) return;
+
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        var res = await fetch('/api/assets/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: sym, asset_type: typeInput.value })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Ticker not found');
+
+        symInput.value = '';
+        await loadAssets();
+        openDrawer(data.asset.asset_id, 'BUY');
+        showToast(data.asset.symbol + ' loaded from live feed.');
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Find';
+      }
+    }
+
+    async function openDrawer(assetId, mode) {
+      selectedAsset = allAssets.find(function (a) { return a.asset_id === assetId; });
+      if (!selectedAsset) return;
+      tradeMode = mode || 'BUY';
+      selectedRange = '1D';
+
+      document.getElementById('asset-drawer').classList.add('open');
+      document.getElementById('trade-msg').style.display = 'none';
+      document.getElementById('d-full-link').href = 'assets.html?id=' + selectedAsset.asset_id;
+
+      renderTable();
+      updateDrawerHeader();
+      updateRangeTabs();
+      renderTradeForm();
+
+      await Promise.all([
+        loadDrawerChart(),
+        loadPosition()
+      ]);
+    }
+
+    function closeDrawer() {
+      document.getElementById('asset-drawer').classList.remove('open');
+      selectedAsset = null;
+      renderTable();
+    }
+
+    function updateDrawerHeader() {
+      if (!selectedAsset) return;
+      document.getElementById('d-symbol').textContent = selectedAsset.symbol;
+      document.getElementById('d-name').textContent = selectedAsset.name;
+
+      var typeEl = document.getElementById('d-type');
+      typeEl.textContent = selectedAsset.asset_type;
+      typeEl.className = 'badge ' + (selectedAsset.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock');
+
+      var riskEl = document.getElementById('d-risk');
+      riskEl.textContent = selectedAsset.risk;
+      riskEl.className = 'badge ' + (selectedAsset.risk === 'LOW' ? 'risk-low' : selectedAsset.risk === 'MEDIUM' ? 'risk-medium' : 'risk-high');
+
+      document.getElementById('d-price').textContent = money(selectedAsset.current_price) + ' VC';
+      var chgEl = document.getElementById('d-chg');
+      chgEl.textContent = pct(selectedAsset.price_change) + ' (24h)';
+      chgEl.className = 'text-xs font-semibold ' + plCls(selectedAsset.price_change);
+    }
+
+    function updateRangeTabs() {
+      document.querySelectorAll('#range-tabs .range-btn').forEach(function (btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-range') === selectedRange);
+      });
+    }
+
+    function setRange(range) {
+      selectedRange = range;
+      updateRangeTabs();
+      loadDrawerChart();
+    }
+
+    async function loadDrawerChart() {
+      if (!selectedAsset) return;
+      try {
+        var res = await fetch('/api/assets/' + selectedAsset.asset_id + '/history?range=' + selectedRange);
+        var hist = await res.json();
+        var labels = hist.labels || [];
+        var prices = hist.prices || [];
+
+        if (selectedAsset.current_price > 0) {
+          labels.push('Now');
+          prices.push(Number(selectedAsset.current_price));
+        }
+
+        var ctx = document.getElementById('drawer-chart');
+        if (drawerChart) drawerChart.destroy();
+
+        drawerChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: prices,
+              borderColor: '#D6C2A3',
+              backgroundColor: 'rgba(214, 194, 163, 0.14)',
+              fill: true,
+              tension: 0.25,
+              pointRadius: prices.length < 15 ? 3 : 0,
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#8C7D68', maxTicksLimit: 6, font: { size: 10 } }, grid: { display: false } },
+              y: { ticks: { color: '#8C7D68', font: { size: 10 } }, grid: { color: 'rgba(58, 48, 41, 0.6)' } }
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Chart load error:', err);
+      }
+    }
+
+    async function loadPosition() {
+      if (!selectedAsset) return;
+      try {
+        var res = await fetch('/api/portfolio/' + user.user_id + '/asset/' + selectedAsset.asset_id);
+        var data = await res.json();
+        currentWallet = Number(data.wallet_balance || 0);
+        currentPosition = data.position;
+
+        user.balance = currentWallet;
+        localStorage.setItem('batua_user', JSON.stringify(user));
+
+        document.getElementById('d-wallet').textContent = money(currentWallet) + ' VC';
+        var box = document.getElementById('d-position-box');
+
+        if (!currentPosition) {
+          box.innerHTML = '<p class="text-xs text-slate-500">You do not currently hold any ' + selectedAsset.symbol + '.</p>';
+        } else {
+          box.innerHTML =
+            '<div class="flex justify-between text-xs mb-1">' +
+              '<span class="text-slate-400">Your Holdings</span>' +
+              '<span class="font-semibold text-white">' + Number(currentPosition.qty).toFixed(6) + ' ' + selectedAsset.symbol + '</span>' +
+            '</div>' +
+            '<div class="flex justify-between text-xs mb-1">' +
+              '<span class="text-slate-400">Amount Invested</span>' +
+              '<span class="text-slate-200">' + money(currentPosition.invested) + ' VC (Avg ' + money(currentPosition.avg_price) + ')</span>' +
+            '</div>' +
+            '<div class="flex justify-between text-xs">' +
+              '<span class="text-slate-400">Current Value &amp; P&amp;L</span>' +
+              '<span class="font-semibold ' + plCls(currentPosition.pl) + '">' +
+                money(currentPosition.current_value) + ' VC (' + (currentPosition.pl >= 0 ? '+' : '') + money(currentPosition.pl) + ')' +
+              '</span>' +
+            '</div>';
+        }
+        renderTradeForm();
+      } catch (err) {
+        console.error('Position load error:', err);
+      }
+    }
+
+    function setTradeMode(mode) {
       tradeMode = mode;
-      document.getElementById('trade-modal').classList.add('open');
-      updateModal();
+      document.getElementById('trade-msg').style.display = 'none';
+      renderTradeForm();
     }
 
-    function closeModal() {
-      document.getElementById('trade-modal').classList.remove('open');
-    }
-
-    function updateModal() {
-      document.getElementById('modal-title').innerHTML = `Trade ${currentAsset.symbol} <span class="text-slate-500 text-xs font-normal">@ ${money(currentAsset.current_price)} TUA</span>`;
+    function renderTradeForm() {
+      if (!selectedAsset) return;
       document.getElementById('btn-buy').className = tradeMode === 'BUY' ? 'btn btn-gain btn-full' : 'btn btn-ghost btn-full';
       document.getElementById('btn-sell').className = tradeMode === 'SELL' ? 'btn btn-loss btn-full' : 'btn btn-ghost btn-full';
 
-      const body = document.getElementById('modal-body');
+      var body = document.getElementById('trade-body');
       if (tradeMode === 'BUY') {
-        body.innerHTML = `
-          <label class="text-xs text-slate-400">Invest amount (TUA)</label>
-          <input id="trade-amount" class="input mt-1" type="number" min="1" step="any" placeholder="e.g. 500">
-          <div class="sub-box text-xs mt-3 flex justify-between">
-            <span class="text-slate-500">Estimated qty (Amount &divide; Price)</span>
-            <span class="font-semibold text-white" id="trade-est">&mdash;</span>
-          </div>
-          <button class="btn btn-gain btn-full mt-4" onclick="executeTrade()">Buy ${currentAsset.symbol}</button>
-        `;
-        document.getElementById('trade-amount').oninput = function() {
-          const amt = Number(this.value);
-          document.getElementById('trade-est').textContent = amt > 0 ? (amt / currentAsset.current_price).toFixed(8) + ' ' + currentAsset.symbol : '—';
+        body.innerHTML =
+          '<label class="text-xs text-slate-400">Invest amount (VC)</label>' +
+          '<input id="trade-amount" class="input mt-1" type="number" min="1" step="any" placeholder="e.g. 500">' +
+          '<div class="sub-box text-xs mt-3 flex justify-between">' +
+            '<span class="text-slate-500">Estimated units</span>' +
+            '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
+          '</div>' +
+          '<button id="exec-btn" class="btn btn-gain btn-full mt-3" onclick="executeOrder()">Buy ' + selectedAsset.symbol + '</button>';
+
+        document.getElementById('trade-amount').oninput = function () {
+          var amt = Number(this.value);
+          document.getElementById('trade-est').textContent =
+            amt > 0 && selectedAsset.current_price > 0
+              ? (amt / selectedAsset.current_price).toFixed(6) + ' ' + selectedAsset.symbol
+              : '—';
         };
       } else {
-        body.innerHTML = `
-          <label class="text-xs text-slate-400">Quantity to sell</label>
-          <input id="trade-qty" class="input mt-1" type="number" min="0" step="any" placeholder="e.g. 0.25">
-          <div class="sub-box text-xs mt-3 flex justify-between">
-            <span class="text-slate-500">Estimated proceeds</span>
-            <span class="font-semibold text-white" id="trade-est">&mdash;</span>
-          </div>
-          <button class="btn btn-loss btn-full mt-4" onclick="executeTrade()">Sell ${currentAsset.symbol}</button>
-        `;
-        document.getElementById('trade-qty').oninput = function() {
-          const qty = Number(this.value);
-          document.getElementById('trade-est').textContent = qty > 0 ? money(qty * currentAsset.current_price) + ' TUA' : '—';
+        var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
+        body.innerHTML =
+          '<div class="flex justify-between items-center">' +
+            '<label class="text-xs text-slate-400">Quantity to sell</label>' +
+            (maxQty > 0 ? '<button type="button" class="link-sky" onclick="document.getElementById(\'trade-qty\').value=' + maxQty + '; document.getElementById(\'trade-qty\').dispatchEvent(new Event(\'input\'))">Max (' + maxQty.toFixed(6) + ')</button>' : '') +
+          '</div>' +
+          '<input id="trade-qty" class="input mt-1" type="number" min="0" step="any" placeholder="e.g. 0.25">' +
+          '<div class="sub-box text-xs mt-3 flex justify-between">' +
+            '<span class="text-slate-500">Estimated proceeds</span>' +
+            '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
+          '</div>' +
+          '<button id="exec-btn" class="btn btn-loss btn-full mt-3" onclick="executeOrder()">Sell ' + selectedAsset.symbol + '</button>';
+
+        document.getElementById('trade-qty').oninput = function () {
+          var qty = Number(this.value);
+          document.getElementById('trade-est').textContent =
+            qty > 0 ? money(qty * selectedAsset.current_price) + ' VC' : '—';
         };
       }
     }
 
-    document.getElementById('btn-buy').onclick = function() { tradeMode = 'BUY'; updateModal(); };
-    document.getElementById('btn-sell').onclick = function() { tradeMode = 'SELL'; updateModal(); };
+    async function executeOrder() {
+      if (!selectedAsset) return;
+      var btn = document.getElementById('exec-btn');
+      var msgBox = document.getElementById('trade-msg');
+      msgBox.style.display = 'none';
 
-    function executeTrade() {
+      var url = tradeMode === 'BUY' ? '/api/trades/buy' : '/api/trades/sell';
+      var payload = { user_id: user.user_id, asset_id: selectedAsset.asset_id };
+
       if (tradeMode === 'BUY') {
-        const amt = Number(document.getElementById('trade-amount').value);
-        if (amt <= 0) { alert('Enter a valid amount'); return; }
-        const qty = (amt / currentAsset.current_price).toFixed(8);
-        alert(`Buy executed: ${qty} ${currentAsset.symbol} @ ${currentAsset.current_price} TUA. (mock preview)`);
+        payload.amount = Number(document.getElementById('trade-amount').value);
+        if (!payload.amount || payload.amount <= 0) return showToast('Enter a valid amount.', true);
       } else {
-        const qty = Number(document.getElementById('trade-qty').value);
-        if (qty <= 0) { alert('Enter a valid quantity'); return; }
-        const proceeds = (qty * currentAsset.current_price).toFixed(2);
-        alert(`Sell executed: ${qty} ${currentAsset.symbol} for ${proceeds} TUA. (mock preview)`);
+        payload.quantity = Number(document.getElementById('trade-qty').value);
+        if (!payload.quantity || payload.quantity <= 0) return showToast('Enter a valid quantity.', true);
       }
-      closeModal();
+
+      btn.disabled = true;
+      btn.textContent = 'Executing...';
+
+      try {
+        var res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Order failed.');
+
+        showToast(data.message, tradeMode === 'BUY' ? 'buy' : 'sell', 4000);
+        await loadPosition();
+      } catch (err) {
+        msgBox.textContent = err.message;
+        msgBox.className = 'sub-box text-xs text-loss mb-3';
+        msgBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = (tradeMode === 'BUY' ? 'Buy ' : 'Sell ') + selectedAsset.symbol;
+      }
     }
 
-    render();
+    // Live SSE price updates for table rows and open drawer
+    var evtSource = new EventSource('/api/stream');
+    evtSource.onmessage = function (e) {
+      var tick = JSON.parse(e.data);
+      var item = allAssets.find(function (a) { return a.symbol === tick.symbol; });
+      if (item) {
+        item.current_price = tick.current_price;
+        item.price_change = tick.price_change;
+      }
+
+      var pxEl = document.getElementById('px-' + tick.symbol);
+      var chgEl = document.getElementById('chg-' + tick.symbol);
+      if (pxEl) pxEl.textContent = money(tick.current_price) + ' VC';
+      if (chgEl) {
+        chgEl.textContent = pct(tick.price_change);
+        chgEl.className = 'td text-right font-semibold ' + plCls(tick.price_change);
+      }
+
+      if (selectedAsset && selectedAsset.symbol === tick.symbol) {
+        selectedAsset.current_price = tick.current_price;
+        selectedAsset.price_change = tick.price_change;
+        updateDrawerHeader();
+
+        if (drawerChart && drawerChart.data.datasets[0].data.length > 0) {
+          var arr = drawerChart.data.datasets[0].data;
+          arr[arr.length - 1] = tick.current_price;
+          drawerChart.update('none');
+        }
+      }
+    };
+
+    loadAssets();
   </script>
 </body>
 </html>

@@ -9,18 +9,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'pages')));
 
-const DEFAULT_ASSETS = [
-  { symbol: 'BTC', name: 'Bitcoin', asset_type: 'CRYPTO' },
-  { symbol: 'ETH', name: 'Ethereum', asset_type: 'CRYPTO' },
-  { symbol: 'AAPL', name: 'Apple Inc.', asset_type: 'STOCK' },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', asset_type: 'STOCK' },
-  { symbol: 'MSFT', name: 'Microsoft Corp.', asset_type: 'STOCK' },
-  { symbol: 'TSLA', name: 'Tesla Inc.', asset_type: 'STOCK' },
-  { symbol: 'NVDA', name: 'NVIDIA Corp.', asset_type: 'STOCK' },
-  { symbol: 'META', name: 'Meta Platforms Inc.', asset_type: 'STOCK' }
-];
-
-// In-memory state
+// In-memory state populated dynamically from the MySQL `assets` table
 const liveState = {};       // symbol -> { asset_id, symbol, name, asset_type, finnhub, price, prevClose, changePct, risk }
 const finnhubToSymbol = {}; // 'BINANCE:BTCUSDT' -> 'BTC'
 const betaCache = {};       // symbol -> 'LOW' | 'MEDIUM' | 'HIGH'
@@ -28,7 +17,11 @@ const candleCache = {};     // 'BTC:1D' -> { data, expiresAt }
 const sseClients = new Set();
 
 function toFinnhubSymbol(symbol, assetType) {
-  return assetType === 'CRYPTO' ? `BINANCE:${symbol.toUpperCase()}USDT` : symbol.toUpperCase();
+  const s = symbol.toUpperCase();
+  if (assetType === 'CRYPTO') {
+    return s === 'USDT' ? 'BINANCE:USDCUSDT' : `BINANCE:${s}USDT`;
+  }
+  return s;
 }
 
 // Safely broadcast live Finnhub ticks to all connected SSE clients
@@ -47,23 +40,8 @@ function broadcastLiveTick(payload) {
   }
 }
 
-// Seed default assets only if the assets table is empty
-async function seedDefaultAssetsIfEmpty() {
-  const [[{ count }]] = await pool.query('SELECT COUNT(*) AS count FROM assets');
-  if (Number(count) > 0) return;
-
-  for (const item of DEFAULT_ASSETS) {
-    const defaultRisk = item.asset_type === 'CRYPTO' ? 'HIGH' : 'MEDIUM';
-    await pool.query(
-      `INSERT INTO assets (symbol, name, asset_type, current_price, price_change, risk, is_active)
-       VALUES (?, ?, ?, 0, 0, ?, TRUE)`,
-      [item.symbol, item.name, item.asset_type, defaultRisk]
-    );
-  }
-  console.log('Seeded initial 8 default assets.');
-}
-
 async function getAssetRisk(symbol, finnhubSymbol, assetType, apiKey) {
+  if (symbol.toUpperCase() === 'USDT') return 'LOW';
   if (assetType === 'CRYPTO') return 'HIGH';
   if (betaCache[symbol] !== undefined) return betaCache[symbol];
 
@@ -88,12 +66,36 @@ async function getAssetRisk(symbol, finnhubSymbol, assetType, apiKey) {
   }
 }
 
-// Fetch initial REST quote & beta for a single asset
+// Fetch initial REST quote & beta for a DB asset (uses Yahoo Finance fallback for .NS stocks)
 async function bootstrapAssetFromRest(row, apiKey) {
   const finnhubSym = toFinnhubSymbol(row.symbol, row.asset_type);
   finnhubToSymbol[finnhubSym] = row.symbol;
 
   try {
+    if (row.symbol.toUpperCase().endsWith('.NS')) {
+      const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(row.symbol)}?range=1d&interval=5m`;
+      const yRes = await fetch(yUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const yJson = await yRes.json();
+      const meta = yJson?.chart?.result?.[0]?.meta;
+
+      const price = typeof meta?.regularMarketPrice === 'number' ? meta.regularMarketPrice : Number(row.current_price || 0);
+      const prevClose = typeof meta?.chartPreviousClose === 'number' && meta.chartPreviousClose > 0 ? meta.chartPreviousClose : price;
+      const changePct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : Number(row.price_change || 0);
+
+      liveState[row.symbol] = {
+        asset_id: row.asset_id,
+        symbol: row.symbol,
+        name: row.name,
+        asset_type: row.asset_type,
+        finnhub: finnhubSym,
+        price,
+        prevClose,
+        changePct,
+        risk: row.risk || 'MEDIUM'
+      };
+      return;
+    }
+
     const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSym)}&token=${apiKey}`;
     const res = await fetch(url);
     const quote = await res.json();
@@ -186,10 +188,13 @@ async function syncSnapshotsToDb(apiKey) {
       'SELECT asset_id, symbol, name, asset_type, current_price, price_change, risk FROM assets WHERE is_active = 1'
     );
 
+    // Pick up any newly inserted rows in MySQL `assets` table automatically
     for (const row of activeRows) {
       if (!liveState[row.symbol]) {
         await bootstrapAssetFromRest(row, apiKey);
-        subscribeWsSymbol(toFinnhubSymbol(row.symbol, row.asset_type));
+        if (!row.symbol.toUpperCase().endsWith('.NS')) {
+          subscribeWsSymbol(toFinnhubSymbol(row.symbol, row.asset_type));
+        }
       }
     }
 
@@ -198,9 +203,14 @@ async function syncSnapshotsToDb(apiKey) {
       const state = liveState[row.symbol];
       if (!state || state.price <= 0) continue;
 
+      // Refresh .NS stocks via Yahoo Finance during sync since Finnhub free WS doesn't stream NSE
+      if (row.symbol.toUpperCase().endsWith('.NS')) {
+        await bootstrapAssetFromRest(row, apiKey);
+      }
+
       await pool.query(
         `UPDATE assets
-         SET current_price = ?, price_change = ?, risk = ?, updated_at = CURRENT_TIMESTAMP
+         SET current_price = ?, price_change = ?, risk = ?
          WHERE asset_id = ?`,
         [state.price, state.changePct, state.risk, row.asset_id]
       );
@@ -386,7 +396,7 @@ app.get('/api/stream', (req, res) => {
   });
 });
 
-// API: Get all active assets (blends live in-memory WebSocket prices with MySQL metadata)
+// API: Get all active assets from MySQL blended with live in-memory WebSocket prices
 app.get('/api/assets', async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -409,7 +419,127 @@ app.get('/api/assets', async (req, res) => {
   }
 });
 
-// API: Get 1D BTC chart data from Binance (cached 2m) + live right-edge price so index.html needs no changes
+// API: Lookup or add a non-featured ticker on demand
+app.post('/api/assets/lookup', async (req, res) => {
+  const rawSymbol = (req.body?.symbol || '').trim().toUpperCase();
+  const assetType = req.body?.asset_type === 'CRYPTO' ? 'CRYPTO' : 'STOCK';
+  if (!rawSymbol || !/^[A-Z0-9.-]{1,15}$/.test(rawSymbol)) {
+    return res.status(400).json({ error: 'Enter a valid ticker symbol (e.g. SOL, AMZN, NFLX).' });
+  }
+
+  try {
+    const [existing] = await pool.query(
+      'SELECT asset_id, symbol, name, asset_type, current_price, price_change, risk, is_active FROM assets WHERE symbol = ? LIMIT 1',
+      [rawSymbol]
+    );
+    if (existing.length > 0) {
+      const row = existing[0];
+      if (!row.is_active) {
+        await pool.query('UPDATE assets SET is_active = 1 WHERE asset_id = ?', [row.asset_id]);
+      }
+      const live = liveState[row.symbol];
+      return res.json({
+        asset: {
+          ...row,
+          current_price: live && live.price > 0 ? live.price : Number(row.current_price),
+          price_change: live ? Number(live.changePct.toFixed(4)) : Number(row.price_change),
+          risk: live ? live.risk : row.risk
+        }
+      });
+    }
+
+    const apiKey = process.env.FINNHUB_API_KEY;
+    const finnhubSym = toFinnhubSymbol(rawSymbol, assetType);
+
+    if (rawSymbol.endsWith('.NS')) {
+      const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(rawSymbol)}?range=1d&interval=5m`;
+      const yRes = await fetch(yUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const yJson = await yRes.json();
+      const meta = yJson?.chart?.result?.[0]?.meta;
+
+      if (!meta || typeof meta.regularMarketPrice !== 'number' || meta.regularMarketPrice <= 0) {
+        return res.status(404).json({ error: `NSE ticker "${rawSymbol}" not found.` });
+      }
+
+      const price = meta.regularMarketPrice;
+      const prevClose = typeof meta.chartPreviousClose === 'number' && meta.chartPreviousClose > 0 ? meta.chartPreviousClose : price;
+      const changePct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+      const assetName = meta.longName || meta.shortName || rawSymbol;
+
+      const [ins] = await pool.query(
+        `INSERT INTO assets (symbol, name, asset_type, current_price, price_change, risk, is_active)
+         VALUES (?, ?, 'STOCK', ?, ?, 'MEDIUM', TRUE)`,
+        [rawSymbol, assetName, price, changePct]
+      );
+
+      const newRow = {
+        asset_id: ins.insertId,
+        symbol: rawSymbol,
+        name: assetName,
+        asset_type: 'STOCK',
+        current_price: price,
+        price_change: changePct,
+        risk: 'MEDIUM'
+      };
+      liveState[rawSymbol] = { ...newRow, finnhub: finnhubSym, price, prevClose, changePct };
+      return res.status(201).json({ asset: newRow });
+    }
+
+    const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSym)}&token=${apiKey}`);
+    const quote = await quoteRes.json();
+
+    if (!quote || typeof quote.c !== 'number' || quote.c <= 0) {
+      return res.status(404).json({ error: `Ticker "${rawSymbol}" (${assetType}) not found on market feed.` });
+    }
+
+    let assetName = rawSymbol;
+    if (assetType === 'STOCK') {
+      try {
+        const profRes = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(rawSymbol)}&token=${apiKey}`);
+        const prof = await profRes.json();
+        if (prof && prof.name) assetName = prof.name;
+      } catch (_) {}
+    } else {
+      assetName = `${rawSymbol} / USDT`;
+    }
+
+    const risk = await getAssetRisk(rawSymbol, finnhubSym, assetType, apiKey);
+    const changePct = typeof quote.dp === 'number' ? quote.dp : 0;
+
+    const [ins] = await pool.query(
+      `INSERT INTO assets (symbol, name, asset_type, current_price, price_change, risk, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+      [rawSymbol, assetName, assetType, quote.c, changePct, risk]
+    );
+
+    const newRow = {
+      asset_id: ins.insertId,
+      symbol: rawSymbol,
+      name: assetName,
+      asset_type: assetType,
+      current_price: quote.c,
+      price_change: changePct,
+      risk
+    };
+
+    finnhubToSymbol[finnhubSym] = rawSymbol;
+    liveState[rawSymbol] = {
+      ...newRow,
+      finnhub: finnhubSym,
+      price: quote.c,
+      prevClose: quote.pc || quote.c,
+      changePct
+    };
+    subscribeWsSymbol(finnhubSym);
+
+    res.status(201).json({ asset: newRow });
+  } catch (err) {
+    console.error('Asset lookup error:', err);
+    res.status(500).json({ error: 'Failed to look up ticker.' });
+  }
+});
+
+// API: Get 1D BTC chart data from Binance (cached 2m) + live right-edge price
 app.get('/api/hero-history', async (req, res) => {
   try {
     const cacheKey = 'BTC:1D';
@@ -438,7 +568,6 @@ app.get('/api/hero-history', async (req, res) => {
       }
     }
 
-    // Fallback to MySQL recorded ticks if Binance is unreachable
     if (prices.length === 0) {
       const [rows] = await pool.query(
         `SELECT h.price, h.timestamp
@@ -459,7 +588,6 @@ app.get('/api/hero-history', async (req, res) => {
       prices = ordered.map((r) => Number(r.price));
     }
 
-    // Append current live Finnhub price as the rightmost tip for /api/stream updates
     if (liveState.BTC && liveState.BTC.price > 0) {
       labels.push(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
       prices.push(liveState.BTC.price);
@@ -503,7 +631,8 @@ app.get('/api/assets/:id/history', async (req, res) => {
         '1Y': { interval: '1d', limit: 365 }
       };
       const cfg = map[selectedRange];
-      const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(asset.symbol)}USDT&interval=${cfg.interval}&limit=${cfg.limit}`;
+      const binancePair = asset.symbol.toUpperCase() === 'USDT' ? 'USDCUSDT' : `${asset.symbol.toUpperCase()}USDT`;
+      const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(binancePair)}&interval=${cfg.interval}&limit=${cfg.limit}`;
       const r = await fetch(url);
       const klines = await r.json();
 
@@ -593,14 +722,12 @@ app.get('/api/dashboard/:userId', async (req, res) => {
   if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
 
   try {
-    // 1. Wallet balance
     const [[walletRow]] = await pool.query(
       'SELECT wallet_id, balance FROM wallets WHERE user_id = ? LIMIT 1',
       [userId]
     );
     const walletBalance = Number(walletRow?.balance || 0);
 
-    // 2. Holdings from portfolio_valuation_view (blended with live in-memory WebSocket prices)
     const [holdingRows] = await pool.query(
       `SELECT asset_id, asset_name, symbol, asset_type, total_fraction_owned,
               total_amount_invested, average_purchase_price, current_price
@@ -637,7 +764,6 @@ app.get('/api/dashboard/:userId', async (req, res) => {
       };
     });
 
-    // 3. Top Gainers (active assets sorted by 24h % change)
     const [assetRows] = await pool.query(
       'SELECT asset_id, symbol, name, asset_type, current_price, price_change FROM assets WHERE is_active = 1'
     );
@@ -655,7 +781,6 @@ app.get('/api/dashboard/:userId', async (req, res) => {
       .sort((a, b) => b.chg - a.chg)
       .slice(0, 4);
 
-    // 4. Recent Trades (last 5 involving this user as buyer or seller)
     const [tradeRows] = await pool.query(
       `SELECT t.trade_id, t.buyer_user_id, t.seller_user_id,
               t.buyer_asset_fraction, t.seller_asset_fraction,
@@ -682,7 +807,6 @@ app.get('/api/dashboard/:userId', async (req, res) => {
       };
     });
 
-    // 5. Live Net Worth & Leaderboard Standing across active users
     const [allUsers] = await pool.query(
       `SELECT u.user_id, COALESCE(w.balance, 0) AS cash
        FROM users u
@@ -726,7 +850,6 @@ app.get('/api/dashboard/:userId', async (req, res) => {
     const rank = myIdx >= 0 ? myIdx + 1 : totalTraders;
     const netWorth = myIdx >= 0 ? standings[myIdx].net_worth : (walletBalance + portfolioValue);
 
-    // 6. 7D Performance Series from user_leaderboard (with clean fallback for brand-new accounts)
     const [lbRows] = await pool.query(
       `SELECT snapshot_date, balance, gain_loss
        FROM user_leaderboard
@@ -775,6 +898,256 @@ app.get('/api/dashboard/:userId', async (req, res) => {
   }
 });
 
+// API: Get user's wallet balance + existing position in a single asset (for Markets drawer)
+app.get('/api/portfolio/:userId/asset/:assetId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  const assetId = Number(req.params.assetId);
+  if (!userId || !assetId) return res.status(400).json({ error: 'Invalid IDs.' });
+
+  try {
+    const [[walletRow]] = await pool.query(
+      'SELECT balance FROM wallets WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
+    const [posRows] = await pool.query(
+      `SELECT p.total_fraction_owned, p.total_amount_invested, p.average_purchase_price,
+              a.symbol, a.current_price
+       FROM portfolio p
+       JOIN assets a ON p.asset_id = a.asset_id
+       WHERE p.user_id = ? AND p.asset_id = ?
+       LIMIT 1`,
+      [userId, assetId]
+    );
+
+    let position = null;
+    if (posRows.length > 0 && Number(posRows[0].total_fraction_owned) > 0) {
+      const p = posRows[0];
+      const live = liveState[p.symbol];
+      const unitPrice = live && live.price > 0 ? live.price : Number(p.current_price);
+      const qty = Number(p.total_fraction_owned);
+      const invested = Number(p.total_amount_invested);
+      const currentValue = qty * unitPrice;
+
+      position = {
+        qty,
+        invested,
+        avg_price: Number(p.average_purchase_price),
+        current_value: currentValue,
+        pl: currentValue - invested
+      };
+    }
+
+    res.json({
+      wallet_balance: Number(walletRow?.balance || 0),
+      position
+    });
+  } catch (err) {
+    console.error('Position lookup error:', err);
+    res.status(500).json({ error: 'Failed to load position.' });
+  }
+});
+
+// POST /api/trades/buy — ACID fractional/whole asset purchase
+app.post('/api/trades/buy', async (req, res) => {
+  const userId = Number(req.body?.user_id);
+  const assetId = Number(req.body?.asset_id);
+  const amount = Number(req.body?.amount);
+
+  if (!userId || !assetId || !Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Enter a valid investment amount.' });
+  }
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [walletRows] = await conn.execute(
+      'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [userId]
+    );
+    if (walletRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Wallet not found.' });
+    }
+    const wallet = walletRows[0];
+    const currentBalance = Number(wallet.balance);
+    if (currentBalance < amount) {
+      await conn.rollback();
+      return res.status(400).json({ error: `Insufficient balance (${currentBalance.toFixed(2)} VC available).` });
+    }
+
+    const [assetRows] = await conn.execute(
+      'SELECT asset_id, symbol, current_price, is_active FROM assets WHERE asset_id = ? LIMIT 1',
+      [assetId]
+    );
+    if (assetRows.length === 0 || !assetRows[0].is_active) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Asset not available for trading.' });
+    }
+    const asset = assetRows[0];
+    const live = liveState[asset.symbol];
+    const unitPrice = live && live.price > 0 ? live.price : Number(asset.current_price);
+    if (unitPrice <= 0) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Live price unavailable. Try again shortly.' });
+    }
+
+    const acquiredFraction = amount / unitPrice;
+    const newBalance = Number((currentBalance - amount).toFixed(2));
+
+    await conn.execute(
+      'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
+      [newBalance, wallet.wallet_id]
+    );
+
+    const [portRows] = await conn.execute(
+      'SELECT portfolio_id, total_fraction_owned, total_amount_invested FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
+      [userId, assetId]
+    );
+
+    if (portRows.length > 0) {
+      const p = portRows[0];
+      const newFraction = Number(p.total_fraction_owned) + acquiredFraction;
+      const newInvested = Number(p.total_amount_invested) + amount;
+      const newAvgPrice = newInvested / newFraction;
+
+      await conn.execute(
+        `UPDATE portfolio
+         SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ?
+         WHERE user_id = ? AND portfolio_id = ?`,
+        [newFraction, newInvested, newAvgPrice, userId, p.portfolio_id]
+      );
+    } else {
+      const [[{ nextId }]] = await conn.execute(
+        'SELECT COALESCE(MAX(portfolio_id), 0) + 1 AS nextId FROM portfolio WHERE user_id = ?',
+        [userId]
+      );
+      await conn.execute(
+        `INSERT INTO portfolio (user_id, portfolio_id, asset_id, total_fraction_owned, total_amount_invested, average_purchase_price)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [userId, nextId, assetId, acquiredFraction, amount, unitPrice]
+      );
+    }
+
+    await conn.execute(
+      `INSERT INTO trade (buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
+       VALUES (?, NULL, ?, NULL, ?, 0, ?, ?, 'COMPLETED')`,
+      [userId, assetId, acquiredFraction, unitPrice, amount]
+    );
+
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'BUY', ?, ?, ?)`,
+      [wallet.wallet_id, amount, newBalance, `Bought ${acquiredFraction.toFixed(6)} ${asset.symbol}`]
+    );
+
+    await conn.commit();
+    res.json({
+      message: `Bought ${acquiredFraction.toFixed(6)} ${asset.symbol} for ${amount.toFixed(2)} VC`,
+      wallet_balance: newBalance
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Buy trade error:', err);
+    res.status(500).json({ error: 'Trade execution failed.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /api/trades/sell — ACID fractional/whole asset sale
+app.post('/api/trades/sell', async (req, res) => {
+  const userId = Number(req.body?.user_id);
+  const assetId = Number(req.body?.asset_id);
+  const sellQty = Number(req.body?.quantity);
+
+  if (!userId || !assetId || !Number.isFinite(sellQty) || sellQty <= 0) {
+    return res.status(400).json({ error: 'Enter a valid quantity to sell.' });
+  }
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [portRows] = await conn.execute(
+      'SELECT portfolio_id, total_fraction_owned, total_amount_invested, average_purchase_price FROM portfolio WHERE user_id = ? AND asset_id = ? FOR UPDATE',
+      [userId, assetId]
+    );
+    if (portRows.length === 0) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'You do not own this asset.' });
+    }
+
+    const pos = portRows[0];
+    const ownedQty = Number(pos.total_fraction_owned);
+    if (sellQty > ownedQty + 1e-12) {
+      await conn.rollback();
+      return res.status(400).json({ error: `Insufficient holdings (${ownedQty.toFixed(6)} units available).` });
+    }
+
+    const actualSellQty = Math.min(sellQty, ownedQty);
+
+    const [assetRows] = await conn.execute(
+      'SELECT asset_id, symbol, current_price FROM assets WHERE asset_id = ? LIMIT 1',
+      [assetId]
+    );
+    const asset = assetRows[0];
+    const live = liveState[asset.symbol];
+    const unitPrice = live && live.price > 0 ? live.price : Number(asset.current_price);
+    const proceeds = Number((actualSellQty * unitPrice).toFixed(2));
+
+    const [walletRows] = await conn.execute(
+      'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [userId]
+    );
+    const wallet = walletRows[0];
+    const newBalance = Number((Number(wallet.balance) + proceeds).toFixed(2));
+
+    await conn.execute(
+      'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
+      [newBalance, wallet.wallet_id]
+    );
+
+    const remainingQty = Math.max(0, ownedQty - actualSellQty);
+    const remainingRatio = ownedQty > 0 ? remainingQty / ownedQty : 0;
+    const remainingInvested = remainingQty < 1e-12 ? 0 : Number((Number(pos.total_amount_invested) * remainingRatio).toFixed(2));
+    const avgPrice = remainingQty < 1e-12 ? 0 : Number(pos.average_purchase_price);
+
+    await conn.execute(
+      `UPDATE portfolio
+       SET total_fraction_owned = ?, total_amount_invested = ?, average_purchase_price = ?
+       WHERE user_id = ? AND portfolio_id = ?`,
+      [remainingQty < 1e-12 ? 0 : remainingQty, remainingInvested, avgPrice, userId, pos.portfolio_id]
+    );
+
+    await conn.execute(
+      `INSERT INTO trade (buyer_user_id, seller_user_id, buyer_asset_id, seller_asset_id, buyer_asset_fraction, seller_asset_fraction, unit_price, total_amount, trade_status)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?, 'COMPLETED')`,
+      [userId, userId, assetId, assetId, actualSellQty, unitPrice, proceeds]
+    );
+
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'SELL', ?, ?, ?)`,
+      [wallet.wallet_id, proceeds, newBalance, `Sold ${actualSellQty.toFixed(6)} ${asset.symbol}`]
+    );
+
+    await conn.commit();
+    res.json({
+      message: `Sold ${actualSellQty.toFixed(6)} ${asset.symbol} for ${proceeds.toFixed(2)} VC`,
+      wallet_balance: newBalance
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Sell trade error:', err);
+    res.status(500).json({ error: 'Sell execution failed.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);
@@ -785,15 +1158,15 @@ app.listen(PORT, async () => {
     return;
   }
 
-  await seedDefaultAssetsIfEmpty();
-
   const [activeAssets] = await pool.query(
     'SELECT asset_id, symbol, name, asset_type, current_price, price_change, risk FROM assets WHERE is_active = 1'
   );
 
   for (const row of activeAssets) {
     await bootstrapAssetFromRest(row, apiKey);
-    subscribeWsSymbol(toFinnhubSymbol(row.symbol, row.asset_type));
+    if (!row.symbol.toUpperCase().endsWith('.NS')) {
+      subscribeWsSymbol(toFinnhubSymbol(row.symbol, row.asset_type));
+    }
   }
 
   await syncSnapshotsToDb(apiKey);
