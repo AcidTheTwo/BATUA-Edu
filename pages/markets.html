@@ -431,11 +431,12 @@
             labels: labels,
             datasets: [{
               data: prices,
-              borderColor: '#D6C2A3',
-              backgroundColor: 'rgba(214, 194, 163, 0.14)',
+              borderColor: '#E5E5E5',
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
               fill: true,
               tension: 0.25,
               pointRadius: prices.length < 15 ? 3 : 0,
+              pointBackgroundColor: '#FFFFFF',
               borderWidth: 2
             }]
           },
@@ -445,8 +446,8 @@
             animation: false,
             plugins: { legend: { display: false } },
             scales: {
-              x: { ticks: { color: '#8C7D68', maxTicksLimit: 6, font: { size: 10 } }, grid: { display: false } },
-              y: { ticks: { color: '#8C7D68', font: { size: 10 } }, grid: { color: 'rgba(58, 48, 41, 0.6)' } }
+              x: { ticks: { color: '#737373', maxTicksLimit: 6, font: { size: 10 } }, grid: { display: false } },
+              y: { ticks: { color: '#737373', font: { size: 10 } }, grid: { color: 'rgba(42, 42, 42, 0.7)' } }
             }
           }
         });
