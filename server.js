@@ -587,6 +587,194 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+// API: Get full live dashboard payload for a user
+app.get('/api/dashboard/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
+
+  try {
+    // 1. Wallet balance
+    const [[walletRow]] = await pool.query(
+      'SELECT wallet_id, balance FROM wallets WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
+    const walletBalance = Number(walletRow?.balance || 0);
+
+    // 2. Holdings from portfolio_valuation_view (blended with live in-memory WebSocket prices)
+    const [holdingRows] = await pool.query(
+      `SELECT asset_id, asset_name, symbol, asset_type, total_fraction_owned,
+              total_amount_invested, average_purchase_price, current_price
+       FROM portfolio_valuation_view
+       WHERE user_id = ?
+       ORDER BY total_amount_invested DESC`,
+      [userId]
+    );
+
+    let invested = 0;
+    let portfolioValue = 0;
+
+    const holdings = holdingRows.map((h) => {
+      const live = liveState[h.symbol];
+      const unitPrice = live && live.price > 0 ? live.price : Number(h.current_price);
+      const qty = Number(h.total_fraction_owned);
+      const cost = Number(h.total_amount_invested);
+      const value = qty * unitPrice;
+      const pl = value - cost;
+
+      invested += cost;
+      portfolioValue += value;
+
+      return {
+        asset_id: h.asset_id,
+        symbol: h.symbol,
+        name: h.asset_name,
+        type: h.asset_type,
+        qty,
+        unit_price: unitPrice,
+        invested: cost,
+        value,
+        pl
+      };
+    });
+
+    // 3. Top Gainers (active assets sorted by 24h % change)
+    const [assetRows] = await pool.query(
+      'SELECT asset_id, symbol, name, asset_type, current_price, price_change FROM assets WHERE is_active = 1'
+    );
+    const gainers = assetRows
+      .map((a) => {
+        const live = liveState[a.symbol];
+        return {
+          id: a.asset_id,
+          symbol: a.symbol,
+          name: a.name,
+          price: live && live.price > 0 ? live.price : Number(a.current_price),
+          chg: live ? Number(live.changePct) : Number(a.price_change || 0)
+        };
+      })
+      .sort((a, b) => b.chg - a.chg)
+      .slice(0, 4);
+
+    // 4. Recent Trades (last 5 involving this user as buyer or seller)
+    const [tradeRows] = await pool.query(
+      `SELECT t.trade_id, t.buyer_user_id, t.seller_user_id,
+              t.buyer_asset_fraction, t.seller_asset_fraction,
+              t.total_amount, t.timestamp,
+              ba.symbol AS buyer_symbol, sa.symbol AS seller_symbol
+       FROM trade t
+       JOIN assets ba ON t.buyer_asset_id = ba.asset_id
+       LEFT JOIN assets sa ON t.seller_asset_id = sa.asset_id
+       WHERE (t.buyer_user_id = ? OR t.seller_user_id = ?)
+         AND t.trade_status = 'COMPLETED'
+       ORDER BY t.timestamp DESC
+       LIMIT 5`,
+      [userId, userId]
+    );
+
+    const recent = tradeRows.map((t) => {
+      const isBuy = Number(t.buyer_user_id) === userId;
+      return {
+        type: isBuy ? 'BUY' : 'SELL',
+        sym: isBuy ? t.buyer_symbol : (t.seller_symbol || t.buyer_symbol),
+        qty: Number(isBuy ? t.buyer_asset_fraction : (t.seller_asset_fraction || t.buyer_asset_fraction)),
+        amt: Number(t.total_amount),
+        timestamp: t.timestamp
+      };
+    });
+
+    // 5. Live Net Worth & Leaderboard Standing across active users
+    const [allUsers] = await pool.query(
+      `SELECT u.user_id, COALESCE(w.balance, 0) AS cash
+       FROM users u
+       LEFT JOIN wallets w ON u.user_id = w.user_id
+       WHERE u.account_status = 'ACTIVE'`
+    );
+    const [allHoldings] = await pool.query(
+      `SELECT p.user_id, p.total_fraction_owned, a.symbol, a.current_price
+       FROM portfolio p
+       JOIN assets a ON p.asset_id = a.asset_id
+       WHERE p.total_fraction_owned > 0`
+    );
+    const [activeLoans] = await pool.query(
+      `SELECT borrower_id, COALESCE(SUM(total_repayment - amount_paid), 0) AS debt
+       FROM loans
+       WHERE loan_status IN ('APPROVED', 'ACTIVE')
+       GROUP BY borrower_id`
+    );
+
+    const holdingsMap = {};
+    for (const row of allHoldings) {
+      const live = liveState[row.symbol];
+      const px = live && live.price > 0 ? live.price : Number(row.current_price);
+      holdingsMap[row.user_id] = (holdingsMap[row.user_id] || 0) + Number(row.total_fraction_owned) * px;
+    }
+
+    const debtMap = {};
+    for (const row of activeLoans) {
+      debtMap[row.borrower_id] = Number(row.debt || 0);
+    }
+
+    const standings = allUsers
+      .map((u) => ({
+        user_id: u.user_id,
+        net_worth: Number(u.cash) + (holdingsMap[u.user_id] || 0) - (debtMap[u.user_id] || 0)
+      }))
+      .sort((a, b) => b.net_worth - a.net_worth);
+
+    const totalTraders = standings.length || 1;
+    const myIdx = standings.findIndex((s) => Number(s.user_id) === userId);
+    const rank = myIdx >= 0 ? myIdx + 1 : totalTraders;
+    const netWorth = myIdx >= 0 ? standings[myIdx].net_worth : (walletBalance + portfolioValue);
+
+    // 6. 7D Performance Series from user_leaderboard (with clean fallback for brand-new accounts)
+    const [lbRows] = await pool.query(
+      `SELECT snapshot_date, balance, gain_loss
+       FROM user_leaderboard
+       WHERE user_id = ?
+       ORDER BY snapshot_date DESC
+       LIMIT 7`,
+      [userId]
+    );
+
+    let series = [];
+    if (lbRows.length >= 2) {
+      series = lbRows.reverse().map((r) => ({
+        label: new Date(r.snapshot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+        value: Number(r.balance)
+      }));
+      series[series.length - 1].value = Number(netWorth.toFixed(2));
+    } else {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        series.push({
+          label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          value: i === 0 ? Number(netWorth.toFixed(2)) : 10000.00
+        });
+      }
+    }
+
+    const prevNet = series.length >= 2 ? series[series.length - 2].value : 10000.00;
+    const dailyPl = netWorth - prevNet;
+
+    res.json({
+      wallet: walletBalance,
+      invested,
+      portfolio_value: portfolioValue,
+      net_worth: netWorth,
+      daily_pl: dailyPl,
+      rank,
+      total_traders: totalTraders,
+      holdings,
+      gainers,
+      recent,
+      series
+    });
+  } catch (err) {
+    console.error('Dashboard API error:', err);
+    res.status(500).json({ error: 'Failed to load dashboard.' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);

@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard &middot; BATUA-Edu</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -23,7 +24,7 @@
       <a href="lending.html" class="nav-link">Lending &amp; Borrowing</a>
       <a href="leaderboard.html" class="nav-link">Leaderboard</a>
       <a href="profile.html" class="nav-link">Profile</a>
-      <a href="admin.html" class="nav-link">Admin Panel</a>
+      <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
       <button id="logout" class="nav-link">Logout</button>
     </nav>
     <div class="sidebar-footer">Educational platform &middot; No real money</div>
@@ -32,7 +33,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
-      <span class="badge-mock">MOCK PREVIEW</span>
+      <span class="text-xs text-slate-500">User Dashboard</span>
     </div>
     <div class="topbar-right">
       <div class="user-meta">
@@ -52,63 +53,186 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script>
     var user;
-    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch(e) { user = null; }
-    if (!user) { location.href = 'login.html'; }
-    document.getElementById('logout').onclick = function(){ localStorage.removeItem('batua_user'); location.href = 'index.html'; };
+    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { user = null; }
+    if (!user) { window.location.replace('auth.html?mode=login'); }
+
+    if (user.role === 'admin') {
+      document.getElementById('admin-link').style.display = 'block';
+    }
+
+    document.getElementById('logout').onclick = function () {
+      localStorage.removeItem('batua_user');
+      window.location.href = 'index.html';
+    };
     document.getElementById('topname').textContent = user.full_name;
     document.getElementById('topuser').textContent = '@' + user.username + ' · ' + user.role;
     document.getElementById('topavatar').textContent = (user.full_name || 'U').charAt(0).toUpperCase();
 
-    var holdings = [
-      { symbol:'BTC', type:'CRYPTO', qty:0.01, value:672.5, pl:20.5 },
-      { symbol:'TCS', type:'STOCK',  qty:0.5,  value:2060,  pl:55 },
-      { symbol:'SOL', type:'CRYPTO', qty:6,    value:1034.4, pl:84 }
-    ];
-    var wallet = 6492.6, invested = 3607.4, hv = 3766.9, net = 9959.5, daily = 42.3, rank = 2, total = 5;
-    var gainers = [
-      {symbol:'SOL',name:'Solana',price:172.4,chg:5.61,id:3},
-      {symbol:'TSLA',name:'Tesla',price:242.7,chg:4.2,id:15},
-      {symbol:'BTC',name:'Bitcoin',price:67250,chg:2.34,id:1},
-      {symbol:'AAPL',name:'Apple',price:228.5,chg:2.75,id:12}
-    ];
-    var recent = [
-      {type:'BUY',sym:'SOL',qty:6,amt:950.4},
-      {type:'SELL',sym:'DOGE',qty:1200,amt:165.6},
-      {type:'BUY',sym:'TCS',qty:0.5,amt:2005}
-    ];
-    var series = []; var v = 9600;
-    for (var i=42;i>=0;i--){ series.push({t:i, value:+(v+= (Math.random()-0.47)*120).toFixed(2)}); }
-    series[series.length-1].value = net;
-    function plCls(n){ return n>=0 ? 'text-gain' : 'text-loss'; }
-    function money(n){ return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+    function plCls(n) { return n >= 0 ? 'text-gain' : 'text-loss'; }
+    function money(n) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmtQty(q) { return Number(q || 0).toLocaleString('en-IN', { maximumFractionDigits: 6 }); }
 
-    var pl = hv - invested;
-    document.getElementById('page').innerHTML =
-      '<div class="page-header"><h1 class="page-title">Dashboard</h1><p class="page-subtitle">Welcome back, '+user.full_name+'.</p></div>'+
-      '<div class="grid sm-grid-2 xl-grid-4 gap-4">'+
-        '<div class="card p-5"><p class="stat-label">Wallet Balance</p><p class="stat-value">'+money(wallet)+' TUA</p></div>'+
-        '<div class="card p-5"><p class="stat-label">Portfolio Value</p><p class="stat-value">'+money(hv)+' TUA</p><p class="text-xs mt-1 text-slate-500">Invested '+money(invested)+' TUA</p></div>'+
-        '<div class="card p-5"><p class="stat-label">Total P&amp;L</p><p class="stat-value '+plCls(pl)+'">'+(pl>=0?'+':'')+money(pl)+' TUA</p><p class="text-xs mt-1 '+plCls(pl)+'">'+(pl>=0?'+':'')+((pl/invested)*100).toFixed(2)+'%</p></div>'+
-        '<div class="card p-5"><p class="stat-label">Daily P&amp;L</p><p class="stat-value '+plCls(daily)+'">+'+money(daily)+' TUA</p><p class="text-xs mt-1 text-slate-500">Net worth '+money(net)+' TUA</p></div>'+
-      '</div>'+
-      '<div class="grid lg-grid-3 gap-4 mt-4">'+
-        '<div class="card lg-col-span-2"><div class="px-5 pt-4 pb-3"><h3 class="font-semibold">Portfolio Performance &middot; 7D</h3></div><div class="px-5 pb-5 h-72"><canvas id="perf"></canvas></div></div>'+
-        '<div class="space-y-4">'+
-          '<div class="card p-5"><p class="stat-label">Leaderboard position</p><p class="text-3xl font-extrabold text-white mt-1">#'+rank+'</p><p class="text-xs text-slate-500 mt-1">of '+total+' traders</p><a href="leaderboard.html" class="link-sky mt-3" style="display:inline-block">View leaderboard &rarr;</a></div>'+
-          '<div class="card p-5"><h3 class="font-semibold mb-3">Top Gainers</h3><div class="space-y-2-5">'+gainers.map(function(g){ return '<a class="gainer-row" href="asset.html?id='+g.id+'"><div><p class="text-sm font-semibold text-white">'+g.symbol+'</p><p class="text-11 text-slate-500">'+g.name+'</p></div><div class="text-right"><p class="text-sm">'+money(g.price)+'</p><p class="text-11 font-semibold '+plCls(g.chg)+'">'+(g.chg>=0?'+':'')+g.chg.toFixed(2)+'%</p></div></a>'; }).join('')+'</div></div>'+
-        '</div>'+
-      '</div>'+
-      '<div class="grid lg-grid-2 gap-4 mt-4">'+
-        '<div class="card p-5"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">Holdings</h3><a href="portfolio.html" class="link-sky">View all &rarr;</a></div>'+holdings.map(function(h){ return '<div class="flex items-center justify-between py-1-5"><div class="flex items-center gap-2"><span class="font-semibold text-white">'+h.symbol+'</span><span class="text-xs text-slate-500">'+h.qty+' units</span></div><div class="text-right"><p class="text-sm">'+money(h.value)+' TUA</p><p class="text-11 font-semibold '+plCls(h.pl)+'">'+(h.pl>=0?'+':'')+money(h.pl)+'</p></div></div>'; }).join('')+'</div>'+
-        '<div class="card p-5"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">Recent Trades</h3><a href="transactions.html" class="link-sky">History &rarr;</a></div>'+recent.map(function(t){ return '<div class="flex items-center justify-between py-1-5"><div><span class="text-11 font-bold mr-2 '+(t.type==='BUY'?'text-gain':'text-loss')+'">'+t.type+'</span><span class="font-semibold text-white">'+t.sym+'</span><span class="text-xs text-slate-500 ml-2">'+t.qty+'</span></div><div class="text-right"><p class="text-sm">'+money(t.amt)+' TUA</p></div></div>'; }).join('')+'</div>'+
-      '</div>';
+    var dashState = null;
+    var perfChart = null;
 
-    new Chart(document.getElementById('perf'), {
-      type:'line',
-      data:{ labels:series.map(function(s){return s.t+'h';}), datasets:[{ data:series.map(function(s){return s.value;}), borderColor:'#34D399', backgroundColor:'#34D39933', fill:true, tension:0.35, pointRadius:0, borderWidth:2 }] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
-        scales:{ x:{ticks:{color:'#64748B',maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(28,42,68,.6)'}}, y:{ticks:{color:'#64748B',font:{size:10}},grid:{color:'rgba(28,42,68,.6)'}} } }
-    });
+    function renderDashboard(data) {
+      dashState = data;
+      var pl = data.portfolio_value - data.invested;
+      var plPct = data.invested > 0 ? ((pl / data.invested) * 100) : 0;
+
+      var gainersHtml = data.gainers.length
+        ? data.gainers.map(function (g) {
+            return '<a class="gainer-row" href="assets.html?id=' + g.id + '">' +
+              '<div><p class="text-sm font-semibold text-white">' + g.symbol + '</p>' +
+              '<p class="text-11 text-slate-500">' + g.name + '</p></div>' +
+              '<div class="text-right"><p class="text-sm">' + money(g.price) + '</p>' +
+              '<p class="text-11 font-semibold ' + plCls(g.chg) + '">' + (g.chg >= 0 ? '+' : '') + g.chg.toFixed(2) + '%</p></div>' +
+            '</a>';
+          }).join('')
+        : '<p class="text-xs text-slate-500 py-3">No active assets listed yet.</p>';
+
+      var holdingsHtml = data.holdings.length
+        ? data.holdings.map(function (h) {
+            return '<div class="flex items-center justify-between py-1-5">' +
+              '<div class="flex items-center gap-2">' +
+                '<a href="assets.html?id=' + h.asset_id + '" class="font-semibold text-white link-sky">' + h.symbol + '</a>' +
+                '<span class="text-xs text-slate-500">' + fmtQty(h.qty) + ' units</span>' +
+              '</div>' +
+              '<div class="text-right">' +
+                '<p class="text-sm">' + money(h.value) + ' VC</p>' +
+                '<p class="text-11 font-semibold ' + plCls(h.pl) + '">' + (h.pl >= 0 ? '+' : '') + money(h.pl) + '</p>' +
+              '</div>' +
+            '</div>';
+          }).join('')
+        : '<p class="text-xs text-slate-500 py-4">No holdings yet. <a href="markets.html" class="link-sky">Explore markets &rarr;</a></p>';
+
+      var recentHtml = data.recent.length
+        ? data.recent.map(function (t) {
+            return '<div class="flex items-center justify-between py-1-5">' +
+              '<div>' +
+                '<span class="text-11 font-bold mr-2 ' + (t.type === 'BUY' ? 'text-gain' : 'text-loss') + '">' + t.type + '</span>' +
+                '<span class="font-semibold text-white">' + t.sym + '</span>' +
+                '<span class="text-xs text-slate-500 ml-2">' + fmtQty(t.qty) + '</span>' +
+              '</div>' +
+              '<div class="text-right"><p class="text-sm">' + money(t.amt) + ' VC</p></div>' +
+            '</div>';
+          }).join('')
+        : '<p class="text-xs text-slate-500 py-4">No trades executed yet.</p>';
+
+      document.getElementById('page').innerHTML =
+        '<div class="page-header">' +
+          '<h1 class="page-title">Dashboard</h1>' +
+          '<p class="page-subtitle">Welcome back, ' + user.full_name + '.</p>' +
+        '</div>' +
+        '<div class="grid sm-grid-2 xl-grid-4 gap-4">' +
+          '<div class="card p-5"><p class="stat-label">Wallet Balance</p><p class="stat-value">' + money(data.wallet) + ' VC</p></div>' +
+          '<div class="card p-5"><p class="stat-label">Portfolio Value</p><p id="kpi-pv" class="stat-value">' + money(data.portfolio_value) + ' VC</p><p class="text-xs mt-1 text-slate-500">Invested ' + money(data.invested) + ' VC</p></div>' +
+          '<div class="card p-5"><p class="stat-label">Total P&amp;L</p><p id="kpi-pl" class="stat-value ' + plCls(pl) + '">' + (pl >= 0 ? '+' : '') + money(pl) + ' VC</p><p id="kpi-plpct" class="text-xs mt-1 ' + plCls(pl) + '">' + (pl >= 0 ? '+' : '') + plPct.toFixed(2) + '%</p></div>' +
+          '<div class="card p-5"><p class="stat-label">Daily P&amp;L</p><p id="kpi-daily" class="stat-value ' + plCls(data.daily_pl) + '">' + (data.daily_pl >= 0 ? '+' : '') + money(data.daily_pl) + ' VC</p><p id="kpi-net" class="text-xs mt-1 text-slate-500">Net worth ' + money(data.net_worth) + ' VC</p></div>' +
+        '</div>' +
+        '<div class="grid lg-grid-3 gap-4 mt-4">' +
+          '<div class="card lg-col-span-2">' +
+            '<div class="px-5 pt-4 pb-3"><h3 class="font-semibold">Portfolio Performance &middot; 7D</h3></div>' +
+            '<div class="px-5 pb-5 h-72"><canvas id="perf"></canvas></div>' +
+          '</div>' +
+          '<div class="space-y-4">' +
+            '<div class="card p-5">' +
+              '<p class="stat-label">Leaderboard position</p>' +
+              '<p class="text-3xl font-extrabold text-white mt-1">#' + data.rank + '</p>' +
+              '<p class="text-xs text-slate-500 mt-1">of ' + data.total_traders + ' traders</p>' +
+              '<a href="leaderboard.html" class="link-sky mt-3" style="display:inline-block">View leaderboard &rarr;</a>' +
+            '</div>' +
+            '<div class="card p-5">' +
+              '<h3 class="font-semibold mb-3">Top Gainers</h3>' +
+              '<div class="space-y-2-5">' + gainersHtml + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="grid lg-grid-2 gap-4 mt-4">' +
+          '<div class="card p-5"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">Holdings</h3><a href="portfolio.html" class="link-sky">View all &rarr;</a></div>' + holdingsHtml + '</div>' +
+          '<div class="card p-5"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">Recent Trades</h3><a href="transactions.html" class="link-sky">History &rarr;</a></div>' + recentHtml + '</div>' +
+        '</div>';
+
+      perfChart = new Chart(document.getElementById('perf'), {
+        type: 'line',
+        data: {
+          labels: data.series.map(function (s) { return s.label; }),
+          datasets: [{
+            data: data.series.map(function (s) { return s.value; }),
+            borderColor: '#D6C2A3',
+            backgroundColor: 'rgba(214, 194, 163, 0.14)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointBackgroundColor: '#D6C2A3',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#8C7D68', font: { size: 10 } }, grid: { color: 'rgba(58, 48, 41, 0.6)' } },
+            y: { ticks: { color: '#8C7D68', font: { size: 10 } }, grid: { color: 'rgba(58, 48, 41, 0.6)' } }
+          }
+        }
+      });
+    }
+
+    async function loadDashboard() {
+      try {
+        var res = await fetch('/api/dashboard/' + encodeURIComponent(user.user_id));
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error loading dashboard');
+        renderDashboard(data);
+      } catch (err) {
+        document.getElementById('page').innerHTML =
+          '<div class="card p-6 text-center text-loss">' + err.message + '</div>';
+      }
+    }
+
+    // Live SSE tick updates for held assets without full page reload
+    var evtSource = new EventSource('/api/stream');
+    evtSource.onmessage = function (e) {
+      if (!dashState || !dashState.holdings.length) return;
+      var tick = JSON.parse(e.data);
+      var changed = false;
+
+      dashState.holdings.forEach(function (h) {
+        if (h.symbol === tick.symbol) {
+          h.unit_price = tick.current_price;
+          h.value = h.qty * h.unit_price;
+          h.pl = h.value - h.invested;
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        var newPv = dashState.holdings.reduce(function (sum, h) { return sum + h.value; }, 0);
+        var pl = newPv - dashState.invested;
+        var plPct = dashState.invested > 0 ? ((pl / dashState.invested) * 100) : 0;
+        var net = dashState.wallet + newPv;
+
+        var pvEl = document.getElementById('kpi-pv');
+        var plEl = document.getElementById('kpi-pl');
+        var plPctEl = document.getElementById('kpi-plpct');
+        var netEl = document.getElementById('kpi-net');
+
+        if (pvEl) pvEl.textContent = money(newPv) + ' VC';
+        if (plEl) {
+          plEl.className = 'stat-value ' + plCls(pl);
+          plEl.textContent = (pl >= 0 ? '+' : '') + money(pl) + ' VC';
+        }
+        if (plPctEl) {
+          plPctEl.className = 'text-xs mt-1 ' + plCls(pl);
+          plPctEl.textContent = (pl >= 0 ? '+' : '') + plPct.toFixed(2) + '%';
+        }
+        if (netEl) netEl.textContent = 'Net worth ' + money(net) + ' VC';
+      }
+    };
+
+    loadDashboard();
   </script>
 </body>
 </html>
