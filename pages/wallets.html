@@ -18,7 +18,7 @@
       <a href="dashboard.html" class="nav-link">Dashboard</a>
       <a href="markets.html" class="nav-link">Markets</a>
       <a href="portfolio.html" class="nav-link">My Portfolio</a>
-      <a href="wallets.html" class="nav-link active">Wallet</a>
+      <a href="wallets.html" class="nav-link">Wallet</a>
       <a href="leaderboard.html" class="nav-link">Leaderboard</a>
       <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
     </nav>
@@ -96,41 +96,47 @@
 
         <!-- Central Credit Pool (Lend & Borrow) -->
         <div class="card p-5 lg-col-span-2">
-          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-            <div>
-              <h3 class="font-semibold text-white">Central Credit Pool</h3>
-              <p class="text-xs text-slate-500 mt-0-5">50% portfolio LTV limit &middot; Supply at 6% p.a. &middot; Borrow at 12% p.a.</p>
-            </div>
+          <div class="mb-4">
+            <h3 class="font-semibold text-white">Central Credit Pool</h3>
+            <p class="text-xs text-slate-500 mt-0-5">50% portfolio LTV limit &middot; Supply at 6% p.a. &middot; Borrow at 12% p.a.</p>
           </div>
 
-          <div class="grid md-grid-2 gap-4">
+          <div class="grid lg-grid-2 gap-4 items-start">
             <!-- Supply / Lend Column -->
-            <div class="sub-box p-4">
-              <p class="text-xs font-semibold text-white uppercase tracking-wide mb-2">Supply Liquidity (Earn 6% p.a.)</p>
-              <div class="flex gap-2">
-                <input id="pool-lend-amt" class="input" type="number" min="1" step="any" placeholder="Amount (VC)">
-                <button id="pool-lend-btn" type="button" class="btn btn-primary shrink-0" onclick="supplyToPool()">Supply</button>
+            <div class="sub-box p-4 space-y-3">
+              <div>
+                <p class="text-xs font-semibold text-white uppercase tracking-wide mb-2">Supply Liquidity (Earn 6% p.a.)</p>
+                <div class="flex gap-2">
+                  <input id="pool-lend-amt" class="input" type="number" min="1" step="any" placeholder="Amount (VC)">
+                  <button id="pool-lend-btn" type="button" class="btn btn-primary shrink-0" onclick="supplyToPool()">Supply</button>
+                </div>
+                <p class="text-11 text-slate-500 mt-1">Redeem unborrowed liquidity + accrued interest anytime.</p>
               </div>
-              <p class="text-11 text-slate-500 mt-2">Redeem unborrowed liquidity + accrued interest anytime.</p>
 
-              <p class="text-11 font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">My Pool Supplies</p>
-              <div id="my-lends" class="space-y-2">
-                <p class="text-xs text-slate-500">None yet.</p>
+              <div class="pt-3" style="border-top: 1px solid var(--border-color);">
+                <p class="text-11 font-semibold text-slate-400 uppercase tracking-wide mb-2">My Pool Supplies</p>
+                <div id="my-lends" class="space-y-2">
+                  <p class="text-xs text-slate-500">None yet.</p>
+                </div>
               </div>
             </div>
 
             <!-- Borrow Column -->
-            <div class="sub-box p-4">
-              <p class="text-xs font-semibold text-white uppercase tracking-wide mb-2">Borrow Against Portfolio (12% p.a.)</p>
-              <div class="flex gap-2">
-                <input id="pool-borrow-amt" class="input" type="number" min="1" step="any" placeholder="Amount (VC)">
-                <button id="pool-borrow-btn" type="button" class="btn btn-primary shrink-0" onclick="borrowFromPool()">Borrow</button>
+            <div class="sub-box p-4 space-y-3">
+              <div>
+                <p class="text-xs font-semibold text-white uppercase tracking-wide mb-2">Borrow Against Portfolio (12% p.a.)</p>
+                <div class="flex gap-2">
+                  <input id="pool-borrow-amt" class="input" type="number" min="1" step="any" placeholder="Amount (VC)">
+                  <button id="pool-borrow-btn" type="button" class="btn btn-primary shrink-0" onclick="borrowFromPool()">Borrow</button>
+                </div>
+                <p class="text-11 text-slate-500 mt-1" id="borrow-hint">Max borrow = 50% of portfolio value minus active debt.</p>
               </div>
-              <p class="text-11 text-slate-500 mt-2" id="borrow-hint">Max borrow = 50% of portfolio value minus active debt.</p>
 
-              <p class="text-11 font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">My Active Loans</p>
-              <div id="my-loans" class="space-y-2">
-                <p class="text-xs text-slate-500">No active loans.</p>
+              <div class="pt-3" style="border-top: 1px solid var(--border-color);">
+                <p class="text-11 font-semibold text-slate-400 uppercase tracking-wide mb-2">My Active Loans</p>
+                <div id="my-loans" class="space-y-2">
+                  <p class="text-xs text-slate-500">No active loans.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -263,14 +269,14 @@
       } else {
         lendsBox.innerHTML = walletData.lends.map(function (l) {
           var canRedeem = l.available_amount > 0;
-          return '<div class="card p-3 flex items-center justify-between gap-2">' +
-            '<div>' +
+          return '<div class="card p-2-5 flex items-center justify-between gap-3">' +
+            '<div class="min-w-0">' +
               '<p class="text-xs font-semibold text-white">' + money(l.principal_amount) + ' VC @ ' + l.interest_rate + '%</p>' +
               '<p class="text-11 text-slate-500">Unborrowed: ' + money(l.available_amount) + ' VC &middot; ' + l.lending_status + '</p>' +
             '</div>' +
             (canRedeem
-              ? '<button type="button" class="btn btn-ghost btn-sm" onclick="redeemPool(' + l.lending_id + ')">Redeem</button>'
-              : '<span class="badge badge-sky">Lent Out</span>') +
+              ? '<button type="button" class="btn btn-ghost btn-sm shrink-0" onclick="redeemPool(' + l.lending_id + ')">Redeem</button>'
+              : '<span class="badge badge-sky shrink-0">Lent Out</span>') +
           '</div>';
         }).join('');
       }
@@ -282,12 +288,12 @@
         loansBox.innerHTML = walletData.loans.map(function (l) {
           var days = Math.max(0, (Date.now() - new Date(l.created_at).getTime()) / 86400000);
           var payoff = l.principal_amount * (1 + (l.interest_rate / 100) * (days / 365)) - l.amount_paid;
-          return '<div class="card p-3 flex items-center justify-between gap-2">' +
-            '<div>' +
+          return '<div class="card p-2-5 flex items-center justify-between gap-3">' +
+            '<div class="min-w-0">' +
               '<p class="text-xs font-semibold text-white">Loan #' + l.loan_id + ': ' + money(l.principal_amount) + ' VC @ ' + l.interest_rate + '%</p>' +
               '<p class="text-11 text-slate-500">Due ' + (l.due_date ? String(l.due_date).slice(0, 10) : '30d') + ' &middot; Payoff &approx; ' + money(Math.max(0, payoff)) + ' VC</p>' +
             '</div>' +
-            '<button type="button" class="btn btn-gain btn-sm" onclick="repayLoan(' + l.loan_id + ')">Repay</button>' +
+            '<button type="button" class="btn btn-gain btn-sm shrink-0" onclick="repayLoan(' + l.loan_id + ')">Repay</button>' +
           '</div>';
         }).join('');
       }

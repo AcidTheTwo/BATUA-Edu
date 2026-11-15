@@ -2085,7 +2085,7 @@ app.post('/api/pool/borrow', async (req, res) => {
        FROM lending
        WHERE lending_status IN ('OPEN', 'PARTIALLY_FUNDED')
          AND available_amount > 0
-         AND lender_id <> ?
+         AND (lender_id <> ? OR description = 'Protocol Reserve Spread')
        ORDER BY created_at ASC
        FOR UPDATE`,
       [userId]
@@ -2145,7 +2145,7 @@ app.post('/api/pool/borrow', async (req, res) => {
   }
 });
 
-// POST /api/pool/repay — Repay an active loan + accrued interest
+// POST /api/pool/repay — Repay loan (12% p.a.): 6% yield to lender, 6% spread retained in Credit Pool reserve
 app.post('/api/pool/repay', async (req, res) => {
   const userId = Number(req.body?.user_id);
   const loanId = Number(req.body?.loan_id);
@@ -2157,10 +2157,12 @@ app.post('/api/pool/repay', async (req, res) => {
     await conn.beginTransaction();
 
     const [loanRows] = await conn.execute(
-      `SELECT loan_id, borrower_id, lender_id, lending_id, principal_amount, interest_rate,
-              total_repayment, amount_paid, loan_status, created_at
-       FROM loans
-       WHERE loan_id = ?
+      `SELECT l.loan_id, l.borrower_id, l.lender_id, l.lending_id, l.principal_amount, l.interest_rate,
+              l.total_repayment, l.amount_paid, l.loan_status, l.created_at,
+              ld.description AS lending_desc
+       FROM loans l
+       LEFT JOIN lending ld ON l.lending_id = ld.lending_id
+       WHERE l.loan_id = ?
        FOR UPDATE`,
       [loanId]
     );
@@ -2176,58 +2178,100 @@ app.post('/api/pool/repay', async (req, res) => {
     }
 
     const days = Math.max(0, (Date.now() - new Date(loan.created_at).getTime()) / 86400000);
-    const accruedPayoff = Number(
-      (Number(loan.principal_amount) * (1 + (Number(loan.interest_rate) / 100) * (days / 365)) - Number(loan.amount_paid)).toFixed(2)
-    );
-    const dueNow = Math.max(0.01, Math.min(accruedPayoff, Number((Number(loan.total_repayment) - Number(loan.amount_paid)).toFixed(2))));
+    const principal = Number(loan.principal_amount);
+    const borrowRate = Number(loan.interest_rate); // 12% p.a.
+    const supplyRate = 6.0;                        // 6% p.a. lender yield
 
-    // Lock borrower & lender wallets in ascending user_id order
+    // Total payoff due from borrower (principal + 12% p.a. pro-rated)
+    const accruedTotal = Number((principal * (1 + (borrowRate / 100) * (days / 365)) - Number(loan.amount_paid)).toFixed(2));
+    const totalDue = Math.max(0.01, Math.min(accruedTotal, Number((Number(loan.total_repayment) - Number(loan.amount_paid)).toFixed(2))));
+
+    // Split into Lender payout (principal + 6% p.a.) and Collective Pool Reserve spread (remaining 6% p.a.)
+    const lenderShareRaw = Number((principal * (1 + (supplyRate / 100) * (days / 365)) - Number(loan.amount_paid)).toFixed(2));
+    const lenderPayout = Math.max(0, Math.min(totalDue, lenderShareRaw));
+    const poolSpread = Number((totalDue - lenderPayout).toFixed(2));
+
+    const isReserveSlice = loan.lending_desc === 'Protocol Reserve Spread';
     const lenderId = Number(loan.lender_id);
-    const ids = lenderId && lenderId !== userId ? [Math.min(userId, lenderId), Math.max(userId, lenderId)] : [userId];
+
+    // Lock borrower wallet (and lender wallet if it's a user-supplied slice) in ascending user_id order
+    const lockIds = (!isReserveSlice && lenderId && lenderId !== userId)
+      ? [Math.min(userId, lenderId), Math.max(userId, lenderId)]
+      : [userId];
+
     const [wRows] = await conn.execute(
-      `SELECT wallet_id, user_id, balance FROM wallets WHERE user_id IN (${ids.map(() => '?').join(',')}) ORDER BY user_id ASC FOR UPDATE`,
-      ids
+      `SELECT wallet_id, user_id, balance FROM wallets WHERE user_id IN (${lockIds.map(() => '?').join(',')}) ORDER BY user_id ASC FOR UPDATE`,
+      lockIds
     );
 
     const bWallet = wRows.find((w) => Number(w.user_id) === userId);
-    const lWallet = lenderId ? wRows.find((w) => Number(w.user_id) === lenderId) : null;
+    const lWallet = (!isReserveSlice && lenderId) ? wRows.find((w) => Number(w.user_id) === lenderId) : null;
 
-    if (!bWallet || Number(bWallet.balance) < dueNow) {
+    if (!bWallet || Number(bWallet.balance) < totalDue) {
       await conn.rollback();
-      return res.status(400).json({ error: `Insufficient balance. Payoff due: ${dueNow.toFixed(2)} VC.` });
+      return res.status(400).json({ error: `Insufficient balance. Payoff due: ${totalDue.toFixed(2)} VC.` });
     }
 
-    const newBorrowerBal = Number((Number(bWallet.balance) - dueNow).toFixed(2));
+    // 1. Deduct full repayment from borrower's wallet
+    const newBorrowerBal = Number((Number(bWallet.balance) - totalDue).toFixed(2));
     await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newBorrowerBal, bWallet.wallet_id]);
     await conn.execute(
       `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
        VALUES (?, 'LOAN_REPAYMENT', ?, ?, ?)`,
-      [bWallet.wallet_id, dueNow, newBorrowerBal, `Repaid Loan #${loanId} (${dueNow.toFixed(2)} VC incl. interest)`]
+      [bWallet.wallet_id, totalDue, newBorrowerBal, `Repaid Loan #${loanId} (${totalDue.toFixed(2)} VC incl. 12% p.a. interest)`]
     );
 
-    if (lWallet) {
-      const newLenderBal = Number((Number(lWallet.balance) + dueNow).toFixed(2));
-      await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newLenderBal, lWallet.wallet_id]);
+    // Resolve admin user_id to anchor collective reserve rows in `lending`
+    const [[adminUser]] = await conn.execute(
+      "SELECT user_id FROM users WHERE role = 'ADMIN' ORDER BY user_id ASC LIMIT 1"
+    );
+    const reserveHolderId = adminUser ? Number(adminUser.user_id) : (lenderId || userId);
+
+    let collectiveReturnAmt = 0;
+
+    if (isReserveSlice) {
+      // Loan came from collective pool reserve -> return 100% of principal + 12% interest back to pool
+      collectiveReturnAmt = totalDue;
+    } else {
+      // Loan came from a regular user -> credit principal + 6% yield to lender, keep 6% spread in pool
+      if (lWallet && lenderPayout > 0) {
+        const newLenderBal = Number((Number(lWallet.balance) + lenderPayout).toFixed(2));
+        await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newLenderBal, lWallet.wallet_id]);
+        await conn.execute(
+          `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+           VALUES (?, 'DEPOSIT', ?, ?, ?)`,
+          [lWallet.wallet_id, lenderPayout, newLenderBal, `Credit Pool repayment received (+${lenderPayout.toFixed(2)} VC incl. 6% yield)`]
+        );
+      }
+      collectiveReturnAmt = poolSpread;
+    }
+
+    // 2. Deposit the spread (or full reserve payoff) back into Central Credit Pool as collective borrowable liquidity
+    if (collectiveReturnAmt > 0) {
       await conn.execute(
-        `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
-         VALUES (?, 'DEPOSIT', ?, ?, ?)`,
-        [lWallet.wallet_id, dueNow, newLenderBal, `Credit Pool loan repayment received (+${dueNow.toFixed(2)} VC)`]
+        `INSERT INTO lending (lender_id, principal_amount, available_amount, interest_rate, term_days, lending_status, description)
+         VALUES (?, ?, ?, 6.000, 30, 'OPEN', 'Protocol Reserve Spread')`,
+        [reserveHolderId, collectiveReturnAmt, collectiveReturnAmt]
       );
     }
 
-    const newPaid = Number((Number(loan.amount_paid) + dueNow).toFixed(2));
+    // 3. Mark loan as REPAID
+    const newPaid = Number((Number(loan.amount_paid) + totalDue).toFixed(2));
     await conn.execute(
-      'UPDATE loans SET amount_paid = ?, total_repayment = ?, loan_status = \'REPAID\' WHERE loan_id = ?',
+      "UPDATE loans SET amount_paid = ?, total_repayment = ?, loan_status = 'REPAID' WHERE loan_id = ?",
       [newPaid, newPaid, loanId]
     );
     await conn.execute(
       `INSERT INTO loan_payments (loan_id, amount, payment_status)
        VALUES (?, ?, 'COMPLETED')`,
-      [loanId, dueNow]
+      [loanId, totalDue]
     );
 
     await conn.commit();
-    res.json({ message: `Repaid ${dueNow.toFixed(2)} VC — Loan #${loanId} settled`, new_balance: newBorrowerBal });
+    res.json({
+      message: `Repaid ${totalDue.toFixed(2)} VC — Loan #${loanId} settled (${collectiveReturnAmt.toFixed(2)} VC added to Credit Pool reserve)`,
+      new_balance: newBorrowerBal
+    });
   } catch (err) {
     if (conn) await conn.rollback();
     console.error('Pool repay error:', err);

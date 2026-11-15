@@ -89,7 +89,7 @@ p, h1, h2, h3 {
   width: 2rem;
   height: 2rem;
   border-radius: 0.5rem;
-  background: radial-gradient(farthest-corner at 0% 100%, #FFFFFF 0%, #D4D4D4 55%, #737373 100%);
+  background: radial-gradient(farthest-corner at 0% 100%, #FFFFFF 0%, #D4D4D4 30%, #737373 100%);
   display: grid;
   place-items: center;
   color: #090909;
