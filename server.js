@@ -1159,7 +1159,6 @@ app.post('/api/trades/sell', async (req, res) => {
 });
 
 // API: Single asset details + latest performance snapshot
-// API: Single asset details + latest performance snapshot
 app.get('/api/assets/:id', async (req, res) => {
   const assetId = Number(req.params.id);
   if (!assetId) return res.status(400).json({ error: 'Invalid asset ID.' });
@@ -1329,7 +1328,7 @@ app.post('/api/p2p/invite', async (req, res) => {
     const roomId = ++p2pRoomSeq;
     const room = {
       room_id: roomId,
-      status: 'INVITED', // INVITED -> A_BUILDING -> B_REVIEWING -> B_BUILDING -> A_REVIEWING -> SETTLED | CLOSED
+      status: 'INVITED', // INVITED -> A BUILDING -> B REVIEWING -> B BUILDING -> A REVIEWING -> SETTLED | CLOSED
       maker: { user_id: Number(maker.user_id), username: maker.username },
       taker: { user_id: Number(taker.user_id), username: taker.username },
       frozen_prices: {},
@@ -1374,7 +1373,7 @@ app.post('/api/p2p/:roomId/respond-invite', async (req, res) => {
     }
 
     room.frozen_prices = frozen;
-    room.status = 'A_BUILDING';
+    room.status = 'A BUILDING';
     room.last_note = `@${room.taker.username} accepted! Prices locked — waiting on @${room.maker.username}'s single-asset offer.`;
     broadcastP2PEvent(room);
     res.json({ message: 'Invite accepted! Market prices are now locked.', room });
@@ -1393,8 +1392,8 @@ app.post('/api/p2p/:roomId/submit-offer', async (req, res) => {
   const room = p2pRooms.get(roomId);
   if (!room) return res.status(404).json({ error: 'Trade room not found.' });
 
-  const isMaker = room.maker.user_id === userId && room.status === 'A_BUILDING';
-  const isTaker = room.taker.user_id === userId && room.status === 'B_BUILDING';
+  const isMaker = room.maker.user_id === userId && room.status === 'A BUILDING';
+  const isTaker = room.taker.user_id === userId && room.status === 'B BUILDING';
   if (!isMaker && !isTaker) return res.status(403).json({ error: 'It is not your turn to submit an offer.' });
 
   if (!assetId || !Number.isFinite(qty) || qty <= 0) {
@@ -1444,11 +1443,11 @@ app.post('/api/p2p/:roomId/submit-offer', async (req, res) => {
 
     if (isMaker) {
       room.offer_a = offerObj;
-      room.status = 'B_REVIEWING';
+      room.status = 'B REVIEWING';
       room.last_note = `@${room.maker.username} offered ${cleanQty.toFixed(6)} ${symbol} (${totalVc.toFixed(2)} VC). Waiting on @${room.taker.username}.`;
     } else {
       room.offer_b = offerObj;
-      room.status = 'A_REVIEWING';
+      room.status = 'A REVIEWING';
       room.last_note = `@${room.taker.username} countered with ${cleanQty.toFixed(6)} ${symbol} (${totalVc.toFixed(2)} VC). Waiting on @${room.maker.username}.`;
     }
 
@@ -1484,13 +1483,13 @@ app.post('/api/p2p/:roomId/review', async (req, res) => {
   }
 
   if (decision === 'REJECT') {
-    if (isTaker && room.status === 'B_REVIEWING') {
+    if (isTaker && room.status === 'B REVIEWING') {
       room.offer_a = null;
-      room.status = 'A_BUILDING';
+      room.status = 'A BUILDING';
       room.last_note = `@${actor} rejected the offer — @${room.maker.username} may revise or leave.`;
-    } else if (isMaker && room.status === 'A_REVIEWING') {
+    } else if (isMaker && room.status === 'A REVIEWING') {
       room.offer_b = null;
-      room.status = 'B_BUILDING';
+      room.status = 'B BUILDING';
       room.last_note = `@${actor} rejected the counter-offer — @${room.taker.username} may revise or leave.`;
     } else {
       return res.status(400).json({ error: 'Cannot reject at this stage.' });
@@ -1502,15 +1501,15 @@ app.post('/api/p2p/:roomId/review', async (req, res) => {
   if (decision !== 'ACCEPT') return res.status(400).json({ error: 'Invalid decision.' });
 
   // Step 4: Taker accepts Maker's offer -> Taker builds single-asset counter-offer
-  if (isTaker && room.status === 'B_REVIEWING') {
-    room.status = 'B_BUILDING';
+  if (isTaker && room.status === 'B REVIEWING') {
+    room.status = 'B BUILDING';
     room.last_note = `@${actor} accepted! Now selecting 1 asset worth ${room.offer_a.total_vc.toFixed(2)} VC.`;
     broadcastP2PEvent(room);
     return res.json({ message: 'Offer accepted! Now select your single asset to match.', room });
   }
 
   // Step 6 & 7: Maker accepts Taker's counter-offer -> ATOMIC 1-ROW SWAP SETTLEMENT
-  if (!(isMaker && room.status === 'A_REVIEWING')) {
+  if (!(isMaker && room.status === 'A REVIEWING')) {
     return res.status(400).json({ error: 'Not ready for final settlement.' });
   }
 
@@ -1603,14 +1602,14 @@ app.post('/api/p2p/:roomId/review', async (req, res) => {
       await conn.execute(
         `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
          VALUES (?, 'TRANSFER_OUT', 0.00, ?, ?)`,
-        [mWallet.wallet_id, Number(mWallet.balance), `P2P Swap with @${room.taker.username}: Gave ${actualMakerGave.toFixed(6)} ${offA.symbol} ⇄ Got ${actualTakerGave.toFixed(6)} ${offB.symbol} (${offA.total_vc.toFixed(2)} VC value)`]
+        [mWallet.wallet_id, Number(mWallet.balance), `Swap @${room.taker.username.split('@')[0]}: ${Number(actualMakerGave.toFixed(4))} ${offA.symbol} ⇄ ${Number(actualTakerGave.toFixed(4))} ${offB.symbol} (${offA.total_vc.toFixed(2)} VC)`]
       );
     }
     if (tWallet) {
       await conn.execute(
         `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
          VALUES (?, 'TRANSFER_IN', 0.00, ?, ?)`,
-        [tWallet.wallet_id, Number(tWallet.balance), `Swap @${room.taker.username.split('@')[0]}: ${Number(actualMakerGave.toFixed(4))} ${offA.symbol} ⇄ ${Number(actualTakerGave.toFixed(4))} ${offB.symbol} (${offA.total_vc.toFixed(2)} VC)`]
+        [tWallet.wallet_id, Number(tWallet.balance), `Swap @${room.maker.username.split('@')[0]}: ${Number(actualTakerGave.toFixed(4))} ${offB.symbol} ⇄ ${Number(actualMakerGave.toFixed(4))} ${offA.symbol} (${offA.total_vc.toFixed(2)} VC)`]
       );
     }
 
@@ -2021,7 +2020,11 @@ app.post('/api/pool/redeem', async (req, res) => {
     const wallet = wRows[0];
     const newBal = Number((Number(wallet.balance) + payout).toFixed(2));
 
-    const nextStatus = avail < Number(lend.principal_amount) ? 'FULLY_FUNDED' : 'CLOSED';
+    const [[activeSlice]] = await conn.execute(
+      `SELECT COUNT(*) AS cnt FROM loans WHERE lending_id = ? AND loan_status IN ('APPROVED', 'ACTIVE')`,
+      [lendingId]
+    );
+    const nextStatus = Number(activeSlice.cnt) > 0 ? 'FULLY_FUNDED' : 'CLOSED';
     await conn.execute('UPDATE lending SET available_amount = 0, lending_status = ? WHERE lending_id = ?', [nextStatus, lendingId]);
     await conn.execute('UPDATE wallets SET balance = ? WHERE wallet_id = ?', [newBal, wallet.wallet_id]);
     await conn.execute(
@@ -2266,6 +2269,24 @@ app.post('/api/pool/repay', async (req, res) => {
        VALUES (?, ?, 'COMPLETED')`,
       [loanId, totalDue]
     );
+
+    // 4. If the parent lending supply had 0 available_amount and no remaining active loans, mark it CLOSED
+    if (loan.lending_id) {
+      const [[parentLend]] = await conn.execute(
+        'SELECT available_amount FROM lending WHERE lending_id = ?',
+        [loan.lending_id]
+      );
+      const [[remLoans]] = await conn.execute(
+        `SELECT COUNT(*) AS cnt FROM loans WHERE lending_id = ? AND loan_status IN ('APPROVED', 'ACTIVE')`,
+        [loan.lending_id]
+      );
+      if (parentLend && Number(parentLend.available_amount) <= 0 && Number(remLoans.cnt) === 0) {
+        await conn.execute(
+          "UPDATE lending SET lending_status = 'CLOSED' WHERE lending_id = ?",
+          [loan.lending_id]
+        );
+      }
+    }
 
     await conn.commit();
     res.json({
