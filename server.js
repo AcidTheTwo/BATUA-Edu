@@ -390,6 +390,157 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+const bcrypt = require('bcryptjs');
+
+app.use(express.json());
+
+// Redirect legacy auth pages to unified auth.html
+app.get('/login.html', (req, res) => {
+  res.redirect('/auth.html?mode=login');
+});
+app.get('/register.html', (req, res) => {
+  res.redirect('/auth.html?mode=register');
+});
+
+// POST /api/auth/register — Atomic ACID signup (users + wallets + wallet_history)
+app.post('/api/auth/register', async (req, res) => {
+  const {
+    username,
+    first_name,
+    middle_name,
+    last_name,
+    email,
+    password
+  } = req.body || {};
+
+  const cleanUser = (username || '').trim();
+  const cleanFirst = (first_name || '').trim();
+  const cleanMiddle = (middle_name || '').trim() || null;
+  const cleanLast = (last_name || '').trim();
+  const cleanEmail = (email || '').trim().toLowerCase();
+
+  if (!cleanUser || !cleanFirst || !cleanLast || !cleanEmail || !password) {
+    return res.status(400).json({ error: 'All required fields must be filled.' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+
+  let conn;
+  try {
+    const passwordHash = await bcrypt.hash(password, 10);
+    conn = await pool.getConnection(); // Uses your MySQL pool from db.js
+    await conn.beginTransaction();
+
+    // 1. Insert user
+    const [userResult] = await conn.execute(
+      `INSERT INTO users (username, first_name, middle_name, last_name, email, password_hash, role, account_status)
+       VALUES (?, ?, ?, ?, ?, ?, 'USER', 'ACTIVE')`,
+      [cleanUser, cleanFirst, cleanMiddle, cleanLast, cleanEmail, passwordHash]
+    );
+    const userId = userResult.insertId;
+
+    // 2. Provision 1:1 wallet with 10,000.00 initial balance
+    const initialBalance = 10000.00;
+    const [walletResult] = await conn.execute(
+      `INSERT INTO wallets (user_id, currency, balance)
+       VALUES (?, 'INR', ?)`,
+      [userId, initialBalance]
+    );
+    const walletId = walletResult.insertId;
+
+    // 3. Log initial DEPOSIT in immutable wallet_history
+    await conn.execute(
+      `INSERT INTO wallet_history (wallet_id, transaction_type, transacted_amount, balance_after, description)
+       VALUES (?, 'DEPOSIT', ?, ?, 'Welcome bonus')`,
+      [walletId, initialBalance, initialBalance]
+    );
+
+    await conn.commit();
+
+    const fullName = [cleanFirst, cleanMiddle, cleanLast].filter(Boolean).join(' ');
+    return res.status(201).json({
+      user: {
+        user_id: userId,
+        username: cleanUser,
+        first_name: cleanFirst,
+        middle_name: cleanMiddle,
+        last_name: cleanLast,
+        full_name: fullName,
+        email: cleanEmail,
+        role: 'user',
+        wallet_id: walletId,
+        balance: initialBalance
+      }
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'Username or email is already registered.' });
+    }
+    console.error('Register error:', err);
+    return res.status(500).json({ error: 'Registration failed. Please try again.' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /api/auth/login — Authenticate by username or email
+app.post('/api/auth/login', async (req, res) => {
+  const { identifier, password } = req.body || {};
+  const cleanId = (identifier || '').trim();
+
+  if (!cleanId || !password) {
+    return res.status(400).json({ error: 'Enter your username/email and password.' });
+  }
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT u.user_id, u.username, u.first_name, u.middle_name, u.last_name,
+              u.email, u.password_hash, u.role, u.account_status,
+              w.wallet_id, w.balance
+       FROM users u
+       LEFT JOIN wallets w ON u.user_id = w.user_id
+       WHERE u.username = ? OR u.email = ?
+       LIMIT 1`,
+      [cleanId, cleanId.toLowerCase()]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials.' });
+    }
+
+    const row = rows[0];
+    if (row.account_status !== 'ACTIVE') {
+      return res.status(403).json({ error: `Account is ${row.account_status.toLowerCase()}. Contact an admin.` });
+    }
+
+    const valid = await bcrypt.compare(password, row.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials.' });
+    }
+
+    const fullName = [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ');
+    return res.json({
+      user: {
+        user_id: row.user_id,
+        username: row.username,
+        first_name: row.first_name,
+        middle_name: row.middle_name,
+        last_name: row.last_name,
+        full_name: fullName,
+        email: row.email,
+        role: row.role.toLowerCase(),
+        wallet_id: row.wallet_id,
+        balance: Number(row.balance || 0)
+      }
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Login failed. Please try again.' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);

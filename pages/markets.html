@@ -23,7 +23,7 @@
       <a href="lending.html" class="nav-link">Lending &amp; Borrowing</a>
       <a href="leaderboard.html" class="nav-link">Leaderboard</a>
       <a href="profile.html" class="nav-link">Profile</a>
-      <a href="login.html" onclick="localStorage.removeItem('batua_user')" class="nav-link">Logout</a>
+      <a href="auth.html?mode=login" onclick="localStorage.removeItem('batua_user')" class="nav-link">Logout</a>
     </nav>
   </aside>
 
@@ -108,7 +108,7 @@
 
   <script>
     let user = JSON.parse(localStorage.getItem('batua_user') || 'null');
-    if (!user) { window.location.href = 'login.html'; }
+    if (!user) { window.location.href = 'auth.html?mode=login'; }
     else {
       document.getElementById('user-name').textContent = user.full_name || user.username;
       document.getElementById('user-role').textContent = '@' + (user.username || 'user') + ' · ' + (user.role || 'user');
