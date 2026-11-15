@@ -201,6 +201,7 @@
     var drawerChart = null;
     var currentWallet = Number(user.balance || 0);
     var currentPosition = null;
+    var orderInputMode = 'VC';
 
     function money(n, d) {
       d = d === undefined ? 2 : d;
@@ -497,8 +498,40 @@
 
     function setTradeMode(mode) {
       tradeMode = mode;
+      orderInputMode = mode === 'BUY' ? 'VC' : 'UNITS';
       document.getElementById('trade-msg').style.display = 'none';
       renderTradeForm();
+    }
+
+    function setOrderInputMode(unitMode) {
+      orderInputMode = unitMode;
+      renderTradeForm();
+    }
+
+    function fillOrderPct(pct) {
+      if (!selectedAsset) return;
+      var input = document.getElementById('trade-val');
+      if (!input) return;
+
+      var px = Number(selectedAsset.current_price || 0);
+
+      if (tradeMode === 'BUY') {
+        var availVc = Math.max(0, currentWallet) * pct;
+        if (orderInputMode === 'VC') {
+          input.value = availVc.toFixed(2);
+        } else if (px > 0) {
+          input.value = (availVc / px).toFixed(6);
+        }
+      } else {
+        var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
+        var targetQty = maxQty * pct;
+        if (orderInputMode === 'UNITS') {
+          input.value = pct === 1 ? maxQty : Number(targetQty.toFixed(6));
+        } else {
+          input.value = (targetQty * px).toFixed(2);
+        }
+      }
+      input.dispatchEvent(new Event('input'));
     }
 
     function renderTradeForm() {
@@ -506,44 +539,57 @@
       document.getElementById('btn-buy').className = tradeMode === 'BUY' ? 'btn btn-gain btn-full' : 'btn btn-ghost btn-full';
       document.getElementById('btn-sell').className = tradeMode === 'SELL' ? 'btn btn-loss btn-full' : 'btn btn-ghost btn-full';
 
+      var isBuy = tradeMode === 'BUY';
+      var isVc = orderInputMode === 'VC';
+      var labelText = isBuy
+        ? (isVc ? 'Amount to invest (VC)' : 'Quantity to buy (' + selectedAsset.symbol + ')')
+        : (isVc ? 'Amount to sell (VC)' : 'Quantity to sell (' + selectedAsset.symbol + ')');
+      var placeholderText = isVc ? 'e.g. 500' : 'e.g. 0.25';
+      var estLabel = isVc ? 'Estimated units' : (isBuy ? 'Estimated cost' : 'Estimated proceeds');
+      var hasBalance = isBuy ? currentWallet > 0 : (currentPosition && Number(currentPosition.qty) > 0);
+
+      var presetsHtml = hasBalance
+        ? '<div class="grid gap-2 mt-2" style="grid-template-columns: repeat(4, minmax(0, 1fr));">' +
+            '<button type="button" class="range-btn" onclick="fillOrderPct(0.10)">10%</button>' +
+            '<button type="button" class="range-btn" onclick="fillOrderPct(0.25)">25%</button>' +
+            '<button type="button" class="range-btn" onclick="fillOrderPct(0.50)">50%</button>' +
+            '<button type="button" class="range-btn" onclick="fillOrderPct(1)">Max</button>' +
+          '</div>'
+        : '';
+
       var body = document.getElementById('trade-body');
-      if (tradeMode === 'BUY') {
-        body.innerHTML =
-          '<label class="text-xs text-slate-400">Invest amount (VC)</label>' +
-          '<input id="trade-amount" class="input mt-1" type="number" min="1" step="any" placeholder="e.g. 500">' +
-          '<div class="sub-box text-xs mt-3 flex justify-between">' +
-            '<span class="text-slate-500">Estimated units</span>' +
-            '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
+      body.innerHTML =
+        '<div class="flex justify-between items-center mb-1">' +
+          '<label class="text-xs text-slate-400">' + labelText + '</label>' +
+          '<div class="flex items-center gap-2">' +
+            '<button type="button" class="range-btn ' + (isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'VC\')">VC</button>' +
+            '<button type="button" class="range-btn ' + (!isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'UNITS\')">' + selectedAsset.symbol + '</button>' +
           '</div>' +
-          '<button id="exec-btn" class="btn btn-gain btn-full mt-3" onclick="executeOrder()">Buy ' + selectedAsset.symbol + '</button>';
+        '</div>' +
+        '<input id="trade-val" class="input mt-1" type="number" min="0" step="any" placeholder="' + placeholderText + '">' +
+        presetsHtml +
+        '<div class="sub-box text-xs mt-3 flex justify-between">' +
+          '<span class="text-slate-500">' + estLabel + '</span>' +
+          '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
+        '</div>' +
+        '<button id="exec-btn" class="btn ' + (isBuy ? 'btn-gain' : 'btn-loss') + ' btn-full mt-3" onclick="executeOrder()">' +
+          (isBuy ? 'Buy ' : 'Sell ') + selectedAsset.symbol +
+        '</button>';
 
-        document.getElementById('trade-amount').oninput = function () {
-          var amt = Number(this.value);
-          document.getElementById('trade-est').textContent =
-            amt > 0 && selectedAsset.current_price > 0
-              ? (amt / selectedAsset.current_price).toFixed(6) + ' ' + selectedAsset.symbol
-              : '—';
-        };
-      } else {
-        var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
-        body.innerHTML =
-          '<div class="flex justify-between items-center">' +
-            '<label class="text-xs text-slate-400">Quantity to sell</label>' +
-            (maxQty > 0 ? '<button type="button" class="link-sky" onclick="document.getElementById(\'trade-qty\').value=' + maxQty + '; document.getElementById(\'trade-qty\').dispatchEvent(new Event(\'input\'))">Max (' + maxQty.toFixed(6) + ')</button>' : '') +
-          '</div>' +
-          '<input id="trade-qty" class="input mt-1" type="number" min="0" step="any" placeholder="e.g. 0.25">' +
-          '<div class="sub-box text-xs mt-3 flex justify-between">' +
-            '<span class="text-slate-500">Estimated proceeds</span>' +
-            '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
-          '</div>' +
-          '<button id="exec-btn" class="btn btn-loss btn-full mt-3" onclick="executeOrder()">Sell ' + selectedAsset.symbol + '</button>';
-
-        document.getElementById('trade-qty').oninput = function () {
-          var qty = Number(this.value);
-          document.getElementById('trade-est').textContent =
-            qty > 0 ? money(qty * selectedAsset.current_price) + ' VC' : '—';
-        };
-      }
+      document.getElementById('trade-val').oninput = function () {
+        var val = Number(this.value);
+        var px = Number(selectedAsset.current_price || 0);
+        var estEl = document.getElementById('trade-est');
+        if (!val || val <= 0 || px <= 0) {
+          estEl.textContent = '—';
+          return;
+        }
+        if (isVc) {
+          estEl.textContent = (val / px).toFixed(6) + ' ' + selectedAsset.symbol;
+        } else {
+          estEl.textContent = money(val * px) + ' VC';
+        }
+      };
     }
 
     async function executeOrder() {
@@ -552,15 +598,26 @@
       var msgBox = document.getElementById('trade-msg');
       msgBox.style.display = 'none';
 
+      var rawVal = Number(document.getElementById('trade-val').value);
+      var px = Number(selectedAsset.current_price || 0);
+      if (!rawVal || rawVal <= 0) return showToast('Enter a valid amount or quantity.', 'info');
+      if (px <= 0) return showToast('Live price unavailable.', 'info');
+
       var url = tradeMode === 'BUY' ? '/api/trades/buy' : '/api/trades/sell';
       var payload = { user_id: user.user_id, asset_id: selectedAsset.asset_id };
 
       if (tradeMode === 'BUY') {
-        payload.amount = Number(document.getElementById('trade-amount').value);
-        if (!payload.amount || payload.amount <= 0) return showToast('Enter a valid amount.', true);
+        payload.amount = orderInputMode === 'VC' ? rawVal : Number((rawVal * px).toFixed(2));
+        if (payload.amount <= 0) return showToast('Calculated VC amount is too small.', 'info');
       } else {
-        payload.quantity = Number(document.getElementById('trade-qty').value);
-        if (!payload.quantity || payload.quantity <= 0) return showToast('Enter a valid quantity.', true);
+        var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
+        var calcQty = orderInputMode === 'UNITS' ? rawVal : (rawVal / px);
+        // Snap cleanly to full position if user entered full VC value within tiny rounding tolerance
+        if (maxQty > 0 && Math.abs(calcQty - maxQty) <= 1e-6) {
+          calcQty = maxQty;
+        }
+        payload.quantity = calcQty;
+        if (payload.quantity <= 0) return showToast('Enter a valid quantity to sell.', 'info');
       }
 
       btn.disabled = true;
