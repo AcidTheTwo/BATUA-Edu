@@ -2302,6 +2302,200 @@ app.post('/api/pool/repay', async (req, res) => {
   }
 });
 
+// =========================================================
+// PROFILE & ACCOUNT SETTINGS ENDPOINTS
+// =========================================================
+
+// GET /api/profile/check-username — Live availability check for username edits
+app.get('/api/profile/check-username', async (req, res) => {
+  const username = (req.query.username || '').trim();
+  const excludeId = Number(req.query.exclude || 0);
+
+  if (!username || !/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) {
+    return res.json({ available: false, reason: '3–30 chars: letters, numbers, _, ., - only.' });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT user_id FROM users WHERE LOWER(username) = LOWER(?) AND user_id <> ? LIMIT 1',
+      [username, excludeId]
+    );
+    res.json({
+      available: rows.length === 0,
+      reason: rows.length === 0 ? 'Username is available.' : 'Username is already taken.'
+    });
+  } catch (err) {
+    res.status(500).json({ available: false, reason: 'Could not verify username.' });
+  }
+});
+
+// GET /api/profile/:userId — Fetch real user metadata & trading summary
+app.get('/api/profile/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
+
+  try {
+    const [uRows] = await pool.query(
+      `SELECT u.user_id, u.username, u.first_name, u.middle_name, u.last_name,
+              u.email, u.role, u.account_status, u.created_at,
+              w.wallet_id, w.balance
+       FROM users u
+       LEFT JOIN wallets w ON u.user_id = w.user_id
+       WHERE u.user_id = ? LIMIT 1`,
+      [userId]
+    );
+    if (uRows.length === 0) return res.status(404).json({ error: 'User not found.' });
+
+    const u = uRows[0];
+    const [[{ trade_count }]] = await pool.query(
+      `SELECT COUNT(*) AS trade_count
+       FROM trade
+       WHERE (buyer_user_id = ? OR seller_user_id = ?) AND trade_status = 'COMPLETED'`,
+      [userId, userId]
+    );
+
+    const [portRows] = await pool.query(
+      `SELECT symbol, total_fraction_owned, current_price
+       FROM portfolio_valuation_view
+       WHERE user_id = ?`,
+      [userId]
+    );
+
+    let portfolioValue = 0;
+    for (const r of portRows) {
+      const live = liveState[r.symbol];
+      const px = live && live.price > 0 ? live.price : Number(r.current_price);
+      portfolioValue += Number(r.total_fraction_owned) * px;
+    }
+
+    const fullName = [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' ');
+
+    res.json({
+      user: {
+        user_id: u.user_id,
+        username: u.username,
+        first_name: u.first_name,
+        middle_name: u.middle_name,
+        last_name: u.last_name,
+        full_name: fullName,
+        email: u.email,
+        role: u.role.toLowerCase(),
+        account_status: u.account_status,
+        created_at: u.created_at,
+        wallet_id: u.wallet_id,
+        balance: Number(u.balance || 0)
+      },
+      stats: {
+        trades: Number(trade_count || 0),
+        holdings_count: portRows.length,
+        portfolio_value: Number(portfolioValue.toFixed(2)),
+        net_worth: Number((Number(u.balance || 0) + portfolioValue).toFixed(2))
+      }
+    });
+  } catch (err) {
+    console.error('Profile fetch error:', err);
+    res.status(500).json({ error: 'Failed to load profile.' });
+  }
+});
+
+// PUT /api/profile/:userId — Update name, username (unique), and email (unique)
+app.put('/api/profile/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  const firstName = (req.body?.first_name || '').trim();
+  const middleName = (req.body?.middle_name || '').trim() || null;
+  const lastName = (req.body?.last_name || '').trim();
+  const username = (req.body?.username || '').trim();
+  const email = (req.body?.email || '').trim().toLowerCase();
+
+  if (!userId || !firstName || !lastName || !username || !email) {
+    return res.status(400).json({ error: 'First name, last name, username, and email are required.' });
+  }
+  if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) {
+    return res.status(400).json({ error: 'Username must be 3–30 characters (letters, numbers, _, ., -).' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Enter a valid email address.' });
+  }
+
+  try {
+    // Explicit uniqueness check on both username and email excluding current user
+    const [dups] = await pool.execute(
+      `SELECT user_id, username, email
+       FROM users
+       WHERE user_id <> ? AND (LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?))
+       LIMIT 1`,
+      [userId, username, email]
+    );
+
+    if (dups.length > 0) {
+      const conflict = dups[0];
+      if (conflict.username.toLowerCase() === username.toLowerCase()) {
+        return res.status(409).json({ error: `Username "@${username}" is already taken.` });
+      }
+      return res.status(409).json({ error: `Email "${email}" is already registered to another account.` });
+    }
+
+    await pool.execute(
+      `UPDATE users
+       SET first_name = ?, middle_name = ?, last_name = ?, username = ?, email = ?
+       WHERE user_id = ?`,
+      [firstName, middleName, lastName, username, email, userId]
+    );
+
+    const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
+    res.json({
+      message: 'Profile details updated successfully.',
+      first_name: firstName,
+      middle_name: middleName,
+      last_name: lastName,
+      full_name: fullName,
+      username,
+      email
+    });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'Username or email is already in use.' });
+    }
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Failed to update profile.' });
+  }
+});
+
+// PUT /api/profile/:userId/password — Verify current bcrypt hash & update password
+app.put('/api/profile/:userId/password', async (req, res) => {
+  const userId = Number(req.params.userId);
+  const currentPassword = req.body?.current_password || '';
+  const newPassword = req.body?.new_password || '';
+
+  if (!userId || !currentPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: 'Provide current password and a new password (min 8 chars).' });
+  }
+
+  try {
+    const [rows] = await pool.execute(
+      'SELECT password_hash FROM users WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found.' });
+
+    const valid = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.execute(
+      'UPDATE users SET password_hash = ? WHERE user_id = ?',
+      [newHash, userId]
+    );
+
+    res.json({ message: 'Password updated successfully.' });
+  } catch (err) {
+    console.error('Password change error:', err);
+    res.status(500).json({ error: 'Failed to update password.' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);

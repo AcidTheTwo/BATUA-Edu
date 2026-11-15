@@ -8,36 +8,323 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="app-main"><div class="container" id="page"></div></main>
+  <main class="app-main">
+    <div class="container" id="page">
+      <div class="page-header">
+        <h1 class="page-title">Profile</h1>
+        <p class="page-subtitle">Manage your identity, credentials, and account overview.</p>
+      </div>
+
+      <div class="grid lg-grid-2 gap-4 items-start">
+        <!-- Left Column: Account Details & Identity Editor -->
+        <div class="card p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-white">Account Details</h3>
+            <span id="acct-status-badge" class="badge badge-gain">ACTIVE</span>
+          </div>
+
+          <div id="account-rows" class="space-y-3 text-sm">
+            <p class="text-xs text-slate-500">Loading account details...</p>
+          </div>
+
+          <div class="divider-top space-y-3">
+            <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Edit Profile &amp; Contact</h4>
+
+            <div>
+              <label class="text-11 text-slate-400 block mb-1">Full Name</label>
+              <div class="grid lg-grid-3 gap-2">
+                <input id="inp-first" class="input" type="text" placeholder="First name">
+                <input id="inp-middle" class="input" type="text" placeholder="Middle (opt)">
+                <input id="inp-last" class="input" type="text" placeholder="Last name">
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-11 text-slate-400" for="inp-username">Username</label>
+                <span id="username-status" class="text-11 text-slate-500"></span>
+              </div>
+              <input id="inp-username" class="input" type="text" placeholder="Username" oninput="onUsernameInput()">
+            </div>
+
+            <div>
+              <label class="text-11 text-slate-400 block mb-1" for="inp-email">Email Address</label>
+              <input id="inp-email" class="input" type="email" placeholder="you@example.com">
+            </div>
+
+            <button id="save-profile-btn" type="button" class="btn btn-primary" onclick="saveProfileDetails()">Save Changes</button>
+          </div>
+        </div>
+
+        <!-- Right Column: Security & Account Snapshot -->
+        <div class="space-y-4">
+          <div class="card p-5">
+            <h3 class="font-semibold text-white mb-4">Change Password</h3>
+            <div class="space-y-3">
+              <input id="cur" class="input" type="password" placeholder="Current password">
+              <input id="next" class="input" type="password" placeholder="New password (min 8 chars)">
+              <input id="confirm" class="input" type="password" placeholder="Confirm new password">
+              <button id="chpw-btn" type="button" class="btn btn-primary" onclick="chpw()">Update Password</button>
+            </div>
+          </div>
+
+          <div class="card p-5">
+            <h3 class="font-semibold text-white mb-3">Account Activity Summary</h3>
+            <div class="grid sm-grid-2 gap-3" id="profile-stats">
+              <div class="sub-box p-3">
+                <p class="text-11 text-slate-500">Completed Trades</p>
+                <p class="text-lg font-bold text-white mt-0-5" id="stat-trades">&mdash;</p>
+              </div>
+              <div class="sub-box p-3">
+                <p class="text-11 text-slate-500">Active Holdings</p>
+                <p class="text-lg font-bold text-white mt-0-5" id="stat-holdings">&mdash;</p>
+              </div>
+              <div class="sub-box p-3">
+                <p class="text-11 text-slate-500">Portfolio Valuation</p>
+                <p class="text-lg font-bold text-white mt-0-5" id="stat-port">&mdash;</p>
+              </div>
+              <div class="sub-box p-3">
+                <p class="text-11 text-slate-500">Estimated Net Worth</p>
+                <p class="text-lg font-bold text-gain mt-0-5" id="stat-net">&mdash;</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
   <script>
-    function getUser(){try{return JSON.parse(localStorage.getItem('batua_user')||'null')}catch(e){return null}}
-    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-    function dtF(s){return new Date(s).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
-    function toast(m,t){
-  var b=document.getElementById('toasts');
-  if(!b){b=document.createElement('div');b.id='toasts';b.className='toast-container';document.body.appendChild(b)}
-  var e=document.createElement('div');
-  e.className='card toast '+(t==='success'?'toast-success':'toast-error');
-  e.textContent=m;
-  b.appendChild(e);
-  setTimeout(function(){e.remove()},4000);
-}
-    var NAV=[['dashboard.html','Dashboard'],['markets.html','Markets'],['portfolio.html','My Portfolio'],['wallet.html','Wallet'],['transactions.html','Transactions'],['transfers.html','P2P Transfers'],['lending.html','Lending & Borrowing'],['leaderboard.html','Leaderboard'],['profile.html','Profile']];
-function shell(active){
-  var u=getUser();
-  if(!u){location.href='login.html';return null}
-  var links=NAV.slice();
-  if(u.role==='admin')links.push(['admin.html','Admin Panel']);
-  var sb='<aside id="sb" class="sidebar"><div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div><nav class="sidebar-nav">'+links.map(function(l){return '<a href="'+l[0]+'" class="nav-link'+(l[0]===active?' active':'')+'">'+l[1]+'</a>'}).join('')+'<a href="login.html" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a></nav></aside>';
-  var tb='<header class="topbar"><div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button><span class="badge-mock">MOCK PREVIEW</span></div><div class="topbar-right"><div class="user-meta"><p class="user-meta-name">'+esc(u.full_name)+'</p><p class="user-meta-sub">@'+esc(u.username)+' &middot; '+esc(u.role)+'</p></div><div class="avatar">'+esc((u.full_name||'U')[0].toUpperCase())+'</div></div></header>';
-  document.body.insertAdjacentHTML('afterbegin',sb+tb);
-  return u;
-}
-    var u=shell('profile.html');
-    var rows=[['User ID','#'+u.user_id],['Full name',u.full_name],['Username','@'+u.username],['Email',u.email],['Role',u.role.toUpperCase()],['Member since',dtF(Date.now()-38*864e5)]].map(function(r){return '<div class="profile-row"><span class="text-slate-500">'+r[0]+'</span><span class="font-medium text-slate-200">'+esc(r[1])+'</span></div>'}).join('');
-    document.getElementById('page').innerHTML='<div class="page-header"><h1 class="page-title">Profile</h1><p class="page-subtitle">Your account details.</p></div><div class="grid lg-grid-2 gap-4"><div class="card p-5"><h3 class="font-semibold mb-4">Account</h3><div class="space-y-3 text-sm">'+rows+'</div></div><div class="card p-5"><h3 class="font-semibold mb-4">Change Password</h3><div class="space-y-3"><input id="cur" class="input" type="password" placeholder="Current password"><input id="next" class="input" type="password" placeholder="New password (min 8 chars)"><button class="btn btn-primary" onclick="chpw()">Update password</button></div><div class="divider-top"><h3 class="font-semibold mb-2 text-sm">Demo data</h3><p class="text-xs text-slate-500 mb-3">Reset your portfolio, wallet and transactions back to the seeded demo state.</p><button class="btn btn-ghost" onclick="resetDemo()">Reset demo data</button></div></div></div>';
-    function chpw(){if(!document.getElementById('cur').value||document.getElementById('next').value.length<8)return toast('Provide current password and a new password (min 8 chars).');toast('Password updated successfully.','success');document.getElementById('cur').value='';document.getElementById('next').value=''}
-    function resetDemo(){localStorage.removeItem('batua_state_v1');toast('Demo data reset. Refresh any page to see seeded values.','success')}
+    function getUser() {
+      try { return JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { return null; }
+    }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function money(n) {
+      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function dtF(s) {
+      if (!s) return '—';
+      return new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+    function toast(m, t) {
+      var b = document.getElementById('toasts');
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'toasts';
+        b.className = 'toast-container';
+        document.body.appendChild(b);
+      }
+      var e = document.createElement('div');
+      e.className = 'card toast ' + (t === 'success' ? 'toast-success' : 'toast-error');
+      e.textContent = m;
+      b.appendChild(e);
+      setTimeout(function () { e.remove(); }, 4000);
+    }
+
+    var NAV = [
+      ['dashboard.html', 'Dashboard'],
+      ['markets.html', 'Markets'],
+      ['assets.html', 'Assets & Swap'],
+      ['wallets.html', 'Wallets & Pool'],
+      ['leaderboard.html', 'Leaderboard'],
+      ['profile.html', 'Profile']
+    ];
+
+    function shell(active) {
+      var u = getUser();
+      if (!u) { location.href = 'auth.html?mode=login'; return null; }
+      var links = NAV.slice();
+      if (u.role === 'admin') links.push(['admin.html', 'Admin Panel']);
+      var sb = '<aside id="sb" class="sidebar">' +
+        '<div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div>' +
+        '<nav class="sidebar-nav">' +
+          links.map(function (l) {
+            return '<a href="' + l[0] + '" class="nav-link' + (l[0] === active ? ' active' : '') + '">' + l[1] + '</a>';
+          }).join('') +
+          '<a href="auth.html?mode=login" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a>' +
+        '</nav></aside>';
+      var tb = '<header class="topbar">' +
+        '<div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button>' +
+        '<span class="badge badge-gain">LIVE ACCOUNT</span></div>' +
+        '<div class="topbar-right">' +
+          '<div class="user-meta"><p id="topbar-fullname" class="user-meta-name">' + esc(u.full_name) + '</p>' +
+          '<p id="topbar-sub" class="user-meta-sub">@' + esc(u.username) + ' &middot; ' + esc(u.role) + '</p></div>' +
+          '<div id="topbar-avatar" class="avatar">' + esc((u.full_name || 'U')[0].toUpperCase()) + '</div>' +
+        '</div></header>';
+      document.body.insertAdjacentHTML('afterbegin', sb + tb);
+      return u;
+    }
+
+    var currentUser = shell('profile.html');
+    var usernameTimer = null;
+    var usernameValid = true;
+
+    function renderAccountRows(u) {
+      var rows = [
+        ['User ID', '#' + u.user_id],
+        ['Wallet ID', u.wallet_id ? '#' + u.wallet_id : '—'],
+        ['Full name', u.full_name],
+        ['Username', '@' + u.username],
+        ['Email', u.email],
+        ['Role', String(u.role || 'user').toUpperCase()],
+        ['Member since', dtF(u.created_at)]
+      ];
+      document.getElementById('account-rows').innerHTML = rows.map(function (r) {
+        return '<div class="profile-row"><span class="text-slate-500">' + r[0] + '</span><span class="font-medium text-slate-200">' + esc(r[1]) + '</span></div>';
+      }).join('');
+
+      document.getElementById('inp-first').value = u.first_name || '';
+      document.getElementById('inp-middle').value = u.middle_name || '';
+      document.getElementById('inp-last').value = u.last_name || '';
+      document.getElementById('inp-username').value = u.username || '';
+      document.getElementById('inp-email').value = u.email || '';
+      document.getElementById('username-status').textContent = '';
+      usernameValid = true;
+    }
+
+    function onUsernameInput() {
+      clearTimeout(usernameTimer);
+      var val = document.getElementById('inp-username').value.trim();
+      var statusEl = document.getElementById('username-status');
+
+      if (!val || val.toLowerCase() === (currentUser.username || '').toLowerCase()) {
+        statusEl.textContent = val ? 'Current username' : '';
+        statusEl.className = 'text-11 text-slate-500';
+        usernameValid = Boolean(val);
+        return;
+      }
+
+      statusEl.textContent = 'Checking...';
+      statusEl.className = 'text-11 text-slate-400';
+
+      usernameTimer = setTimeout(async function () {
+        try {
+          var res = await fetch('/api/profile/check-username?username=' + encodeURIComponent(val) + '&exclude=' + currentUser.user_id);
+          var data = await res.json();
+          usernameValid = Boolean(data.available);
+          statusEl.textContent = data.reason;
+          statusEl.className = 'text-11 ' + (data.available ? 'text-gain' : 'text-loss');
+        } catch (e) {
+          statusEl.textContent = '';
+        }
+      }, 300);
+    }
+
+    async function loadProfile() {
+      if (!currentUser) return;
+      renderAccountRows(currentUser);
+      try {
+        var res = await fetch('/api/profile/' + currentUser.user_id);
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load profile');
+
+        currentUser = Object.assign({}, currentUser, data.user);
+        localStorage.setItem('batua_user', JSON.stringify(currentUser));
+        renderAccountRows(currentUser);
+
+        var badge = document.getElementById('acct-status-badge');
+        badge.textContent = data.user.account_status || 'ACTIVE';
+        badge.className = 'badge ' + (data.user.account_status === 'ACTIVE' ? 'badge-gain' : 'badge-loss');
+
+        document.getElementById('stat-trades').textContent = data.stats.trades;
+        document.getElementById('stat-holdings').textContent = data.stats.holdings_count;
+        document.getElementById('stat-port').textContent = money(data.stats.portfolio_value) + ' VC';
+        document.getElementById('stat-net').textContent = money(data.stats.net_worth) + ' VC';
+      } catch (err) {
+        toast(err.message);
+      }
+    }
+
+    async function saveProfileDetails() {
+      var first = document.getElementById('inp-first').value.trim();
+      var middle = document.getElementById('inp-middle').value.trim();
+      var last = document.getElementById('inp-last').value.trim();
+      var username = document.getElementById('inp-username').value.trim();
+      var email = document.getElementById('inp-email').value.trim();
+
+      if (!first || !last || !username || !email) {
+        return toast('First name, last name, username, and email are required.');
+      }
+      if (!usernameValid) {
+        return toast('Please choose an available, valid username.');
+      }
+
+      var btn = document.getElementById('save-profile-btn');
+      btn.disabled = true;
+      try {
+        var res = await fetch('/api/profile/' + currentUser.user_id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: first,
+            middle_name: middle,
+            last_name: last,
+            username: username,
+            email: email
+          })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Update failed');
+
+        currentUser.first_name = data.first_name;
+        currentUser.middle_name = data.middle_name;
+        currentUser.last_name = data.last_name;
+        currentUser.full_name = data.full_name;
+        currentUser.username = data.username;
+        currentUser.email = data.email;
+        localStorage.setItem('batua_user', JSON.stringify(currentUser));
+
+        document.getElementById('topbar-fullname').textContent = data.full_name;
+        document.getElementById('topbar-sub').textContent = '@' + data.username + ' · ' + currentUser.role;
+        document.getElementById('topbar-avatar').textContent = (data.full_name || 'U')[0].toUpperCase();
+        renderAccountRows(currentUser);
+        toast(data.message, 'success');
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function chpw() {
+      var cur = document.getElementById('cur').value;
+      var next = document.getElementById('next').value;
+      var confirmPw = document.getElementById('confirm').value;
+
+      if (!cur || next.length < 8) {
+        return toast('Provide current password and a new password (min 8 chars).');
+      }
+      if (next !== confirmPw) {
+        return toast('New password and confirmation do not match.');
+      }
+
+      var btn = document.getElementById('chpw-btn');
+      btn.disabled = true;
+      try {
+        var res = await fetch('/api/profile/' + currentUser.user_id + '/password', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: cur, new_password: next })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Password update failed');
+
+        toast(data.message, 'success');
+        document.getElementById('cur').value = '';
+        document.getElementById('next').value = '';
+        document.getElementById('confirm').value = '';
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    loadProfile();
   </script>
 </body>
 </html>
