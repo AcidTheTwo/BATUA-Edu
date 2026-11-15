@@ -18,17 +18,16 @@
       <a href="dashboard.html" class="nav-link">Dashboard</a>
       <a href="markets.html" class="nav-link active">Markets</a>
       <a href="portfolio.html" class="nav-link">My Portfolio</a>
-      <a href="wallets.html" class="nav-link">Wallets</a>
+      <a href="wallets.html" class="nav-link active">Wallet</a>
       <a href="leaderboard.html" class="nav-link">Leaderboard</a>
       <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
     </nav>
-    <div class="sidebar-footer">Educational platform &middot; No real money</div>
+    <div class="sidebar-footer">&copy PRIMARY K's</div>
   </aside>
 
   <header class="topbar">
     <div class="topbar-left">
       <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
-      <span class="text-xs text-slate-500">Live Markets</span>
     </div>
     <div class="topbar-right">
       <div class="user-menu" tabindex="0">
@@ -58,10 +57,9 @@
       <div class="page-header-row">
         <div>
           <h1 class="page-title">Markets</h1>
-          <p class="page-subtitle">Click any asset to inspect charts, check your position, and execute trades.</p>
         </div>
         <div class="flex items-center gap-2">
-          <input id="lookup-symbol" class="input" style="width:11rem;" placeholder="Add ticker (e.g. SOL)">
+          <input id="lookup-symbol" class="input" style="width:25rem;" placeholder="Add ticker (use .NS suffix for Indian Stocks)">
           <select id="lookup-type" class="input" style="width:6.5rem;">
             <option value="STOCK">Stock</option>
             <option value="CRYPTO">Crypto</option>

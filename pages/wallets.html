@@ -18,11 +18,11 @@
       <a href="dashboard.html" class="nav-link">Dashboard</a>
       <a href="markets.html" class="nav-link">Markets</a>
       <a href="portfolio.html" class="nav-link">My Portfolio</a>
-      <a href="wallets.html" class="nav-link active">Wallets</a>
+      <a href="wallets.html" class="nav-link active">Wallet</a>
       <a href="leaderboard.html" class="nav-link">Leaderboard</a>
       <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
     </nav>
-    <div class="sidebar-footer">Educational platform &middot; No real money</div>
+    <div class="sidebar-footer">&copy PRIMARY K's</div>
   </aside>
 
   <header class="topbar">
@@ -55,7 +55,7 @@
   <main class="app-main">
     <div class="container">
       <div class="page-header">
-        <h1 class="page-title">Wallets, P2P Trade Room &amp; Credit Pool</h1>
+        <h1 class="page-title">Wallet &amp; Related</h1>
         <p class="page-subtitle" id="wallet-sub">Loading wallet metadata...</p>
       </div>
 
@@ -64,12 +64,10 @@
         <div class="card p-5">
           <p class="stat-label">Available Balance</p>
           <p class="stat-value" id="k-bal">0.00 VC</p>
-          <p class="text-xs mt-1 text-slate-500">Liquid trading cash</p>
         </div>
         <div class="card p-5">
           <p class="stat-label">Central Pool Liquidity</p>
           <p class="stat-value" id="k-pool">0.00 VC</p>
-          <p class="text-xs mt-1 text-slate-500">Lend 6% p.a. &middot; Borrow 12% p.a.</p>
         </div>
         <div class="card p-5">
           <p class="stat-label">Outstanding Debt</p>
@@ -91,7 +89,6 @@
               <h3 class="font-semibold text-white">P2P Trade Room</h3>
               <span id="p2p-stage-badge" class="badge badge-sky">NEW REQUEST</span>
             </div>
-            <p class="text-xs text-slate-500 mb-4">Invite a trader, lock live prices, and negotiate a 1-asset swap.</p>
             <div id="p2p-room-body">
               <p class="text-xs text-slate-500">Loading trade room...</p>
             </div>
@@ -240,7 +237,7 @@
         localStorage.setItem('batua_user', JSON.stringify(user));
 
         document.getElementById('wallet-sub').textContent =
-          'Wallet #' + walletData.wallet_id + ' · Last updated ' + fmtTime(walletData.last_updated);
+          'Wallet Last updated ' + fmtTime(walletData.last_updated);
 
         document.getElementById('k-bal').textContent = money(walletData.balance) + ' VC';
         document.getElementById('k-pool').textContent = money(walletData.pool_liquidity) + ' VC';
