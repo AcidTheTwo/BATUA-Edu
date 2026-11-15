@@ -1398,6 +1398,99 @@ app.post('/api/transfers/asset', async (req, res) => {
   }
 });
 
+// API: Full portfolio holdings, valuation summary, and 7D series
+app.get('/api/portfolio/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!userId) return res.status(400).json({ error: 'Invalid user ID.' });
+
+  try {
+    const [[walletRow]] = await pool.query(
+      'SELECT balance FROM wallets WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT asset_id, asset_name, symbol, asset_type, risk,
+              total_fraction_owned, total_amount_invested,
+              average_purchase_price, current_price
+       FROM portfolio_valuation_view
+       WHERE user_id = ?
+       ORDER BY total_amount_invested DESC`,
+      [userId]
+    );
+
+    let totalInvested = 0;
+    let totalValue = 0;
+
+    const holdings = rows.map((r) => {
+      const live = liveState[r.symbol];
+      const unitPrice = live && live.price > 0 ? live.price : Number(r.current_price);
+      const qty = Number(r.total_fraction_owned);
+      const invested = Number(r.total_amount_invested);
+      const avgPrice = Number(r.average_purchase_price);
+      const marketValue = qty * unitPrice;
+      const pl = marketValue - invested;
+      const returnPct = invested > 0 ? (pl / invested) * 100 : 0;
+
+      totalInvested += invested;
+      totalValue += marketValue;
+
+      return {
+        asset_id: r.asset_id,
+        symbol: r.symbol,
+        name: r.asset_name,
+        asset_type: r.asset_type,
+        risk: live ? live.risk : r.risk,
+        qty,
+        avg_price: avgPrice,
+        unit_price: unitPrice,
+        invested,
+        market_value: marketValue,
+        pl,
+        return_pct: returnPct
+      };
+    });
+
+    const [lbRows] = await pool.query(
+      `SELECT snapshot_date, balance
+       FROM user_leaderboard
+       WHERE user_id = ?
+       ORDER BY snapshot_date DESC
+       LIMIT 7`,
+      [userId]
+    );
+
+    let series = [];
+    if (lbRows.length >= 2) {
+      series = lbRows.reverse().map((r) => ({
+        label: new Date(r.snapshot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+        value: Number(r.balance)
+      }));
+    } else {
+      const netWorth = Number(walletRow?.balance || 0) + totalValue;
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        series.push({
+          label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          value: i === 0 ? Number(netWorth.toFixed(2)) : 10000.00
+        });
+      }
+    }
+
+    res.json({
+      wallet_balance: Number(walletRow?.balance || 0),
+      total_invested: totalInvested,
+      total_value: totalValue,
+      total_pl: totalValue - totalInvested,
+      holdings,
+      series
+    });
+  } catch (err) {
+    console.error('Portfolio load error:', err);
+    res.status(500).json({ error: 'Failed to load portfolio.' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);
