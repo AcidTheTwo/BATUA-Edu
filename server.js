@@ -2563,6 +2563,59 @@ app.put('/api/profile/:userId/password', async (req, res) => {
   }
 });
 
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        u.user_id,
+        u.username,
+        CONCAT_WS(' ', u.first_name, NULLIF(u.middle_name, ''), u.last_name) AS full_name,
+        COALESCE(w.balance, 0) AS wallet_balance,
+        COALESCE(p.portfolio_value, 0) AS portfolio_value,
+        COALESCE(lnd.active_lent, 0) AS active_lent,
+        COALESCE(ln.active_debt, 0) AS active_debt,
+        (
+          COALESCE(w.balance, 0) +
+          COALESCE(p.portfolio_value, 0) +
+          COALESCE(lnd.active_lent, 0) -
+          COALESCE(ln.active_debt, 0)
+        ) AS net_worth
+      FROM users u
+      LEFT JOIN wallets w ON w.user_id = u.user_id
+      LEFT JOIN (
+        SELECT
+          user_id,
+          SUM(current_value) AS portfolio_value
+        FROM portfolio_valuation_view
+        GROUP BY user_id
+      ) p ON p.user_id = u.user_id
+      LEFT JOIN (
+        SELECT
+          lender_id AS user_id,
+          SUM(principal_amount) AS active_lent
+        FROM lending
+        WHERE lending_status IN ('OPEN', 'PARTIALLY_FUNDED', 'FULLY_FUNDED')
+        GROUP BY lender_id
+      ) lnd ON lnd.user_id = u.user_id
+      LEFT JOIN (
+        SELECT
+          borrower_id AS user_id,
+          SUM(GREATEST(0, principal_amount - COALESCE(amount_paid, 0))) AS active_debt
+        FROM loans
+        WHERE loan_status = 'ACTIVE'
+        GROUP BY borrower_id
+      ) ln ON ln.user_id = u.user_id
+      WHERE u.account_status = 'ACTIVE'
+      ORDER BY net_worth DESC
+    `);
+
+    res.json({ leaderboard: rows });
+  } catch (err) {
+    console.error('Leaderboard error:', err);
+    res.status(500).json({ error: 'Failed to fetch leaderboard standings.' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`BATUA-Edu running on http://localhost:${PORT}`);

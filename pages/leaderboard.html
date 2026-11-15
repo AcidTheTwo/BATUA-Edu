@@ -2,37 +2,255 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Leaderboard &middot; BATUA-Edu</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="app-main"><div class="container" id="page"></div></main>
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">B</div>
+      <span class="brand-text">BATUA<span>-Edu</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="markets.html" class="nav-link">Markets</a>
+      <a href="portfolio.html" class="nav-link">My Portfolio</a>
+      <a href="wallets.html" class="nav-link">Wallet</a>
+      <a href="leaderboard.html" class="nav-link active">Leaderboard</a>
+      <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="sidebar-footer">&copy; PRIMARY K's</div>
+  </aside>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
+      <span class="badge badge-gain">LIVE RANKINGS</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-menu" tabindex="0">
+        <div class="user-meta">
+          <p class="user-meta-name" id="user-name">Loading...</p>
+          <p class="user-meta-sub" id="user-role">user</p>
+        </div>
+        <div class="avatar" id="user-avatar">U</div>
+        <div class="user-dropdown">
+          <div class="user-dropdown-panel">
+            <a href="profile.html" class="dropdown-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Profile
+            </a>
+            <button id="logout" type="button" class="dropdown-item dropdown-item-danger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="container">
+      <div class="page-header flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="page-title">Global Leaderboard</h1>
+          <p class="page-subtitle">Ranked by Net Worth = Wallet Balance + Portfolio Value + Pool Supplies &minus; Active Debt.</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="loadLeaderboard()">Refresh</button>
+      </div>
+
+      <!-- Current User Rank Summary Banner -->
+      <div class="card card-sky-border p-5 mb-4 flex flex-wrap items-center gap-6" id="my-rank-banner">
+        <div>
+          <p class="stat-label">Your Rank</p>
+          <p class="text-3xl font-extrabold text-sky" id="my-rank">&mdash;</p>
+        </div>
+        <div>
+          <p class="stat-label">Net Worth</p>
+          <p class="text-lg font-bold text-white" id="my-net">0.00 VC</p>
+        </div>
+        <div>
+          <p class="stat-label">Total Profit</p>
+          <p class="text-lg font-bold text-white" id="my-profit">0.00 VC</p>
+        </div>
+        <div>
+          <p class="stat-label">Returns</p>
+          <p class="text-lg font-bold text-white" id="my-ret">0.00%</p>
+        </div>
+      </div>
+
+      <!-- Rankings Table -->
+      <div class="card table-wrap">
+        <table class="min-w-760">
+          <thead>
+            <tr>
+              <th class="th">Rank</th>
+              <th class="th">Trader</th>
+              <th class="th text-right">Portfolio Value</th>
+              <th class="th text-right">Wallet Balance</th>
+              <th class="th text-right">Net Worth</th>
+              <th class="th text-right">Total Profit</th>
+              <th class="th text-right">Returns</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body">
+            <tr><td colspan="7" class="td text-center text-slate-500">Loading live standings...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div id="toasts" class="toast-container"></div>
+
   <script>
-    function getUser(){try{return JSON.parse(localStorage.getItem('batua_user')||'null')}catch(e){return null}}
-    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-    function money(n,d){return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})}
-    function pct(n){return (Number(n||0)>=0?'+':'')+Number(n||0).toFixed(2)+'%'}
-    function plCls(n){return Number(n||0)>=0?'text-gain':'text-loss'}
-    var NAV=[['dashboard.html','Dashboard'],['markets.html','Markets'],['portfolio.html','My Portfolio'],['wallet.html','Wallet'],['transactions.html','Transactions'],['transfers.html','P2P Transfers'],['lending.html','Lending & Borrowing'],['leaderboard.html','Leaderboard'],['profile.html','Profile']];
-function shell(active){
-  var u=getUser();
-  if(!u){location.href='login.html';return null}
-  var links=NAV.slice();
-  if(u.role==='admin')links.push(['admin.html','Admin Panel']);
-  var sb='<aside id="sb" class="sidebar"><div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div><nav class="sidebar-nav">'+links.map(function(l){return '<a href="'+l[0]+'" class="nav-link'+(l[0]===active?' active':'')+'">'+l[1]+'</a>'}).join('')+'<a href="login.html" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a></nav></aside>';
-  var tb='<header class="topbar"><div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button><span class="badge-mock">MOCK PREVIEW</span></div><div class="topbar-right"><div class="user-meta"><p class="user-meta-name">'+esc(u.full_name)+'</p><p class="user-meta-sub">@'+esc(u.username)+' &middot; '+esc(u.role)+'</p></div><div class="avatar">'+esc((u.full_name||'U')[0].toUpperCase())+'</div></div></header>';
-  document.body.insertAdjacentHTML('afterbegin',sb+tb);
-  return u;
-}
-    var me=shell('leaderboard.html');
-    var SK='batua_state_v1';var st=null;try{st=JSON.parse(localStorage.getItem(SK))}catch(e){}
-    var board=[{username:'meera',wallet:4210.4,hold:5609.6},{username:'admin',wallet:10000,hold:0},{username:me.username,wallet:st?st.balance:6492.6,hold:st?st.holdings.reduce(function(t,x){return t+x.qty*x.price},0):3466.9},{username:'rohan',wallet:7120.75,hold:2561.25},{username:'sneha',wallet:3260.1,hold:5639.9}];
-    board=board.map(function(r){var nw=r.wallet+r.hold;return {username:r.username,wallet:r.wallet,hold:r.hold,net:nw,profit:nw-10000,ret:(nw-10000)/100}}).sort(function(a,b){return b.net-a.net}).map(function(r,i){r.rank=i+1;return r});
-    var mine=board.find(function(r){return r.username===me.username})||board[2];
-    function medal(r){return r<=3?'medal medal-'+r:'medal'}
-    document.getElementById('page').innerHTML='<div class="page-header"><h1 class="page-title">Global Leaderboard</h1><p class="page-subtitle">Ranked by net worth = wallet + holdings &minus; loans. Profit measured against the 10,000 TUA bonus.</p></div><div class="card card-sky-border p-5 mb-4 flex flex-wrap items-center gap-6"><div><p class="stat-label">Your rank</p><p class="text-3xl font-extrabold text-sky">#'+mine.rank+'</p></div><div><p class="stat-label">Net worth</p><p class="text-lg font-bold text-white">'+money(mine.net)+' TUA</p></div><div><p class="stat-label">Total profit</p><p class="text-lg font-bold '+plCls(mine.profit)+'">'+(mine.profit>=0?'+':'')+money(mine.profit)+' TUA</p></div><div><p class="stat-label">Returns</p><p class="text-lg font-bold '+plCls(mine.ret)+'">'+pct(mine.ret)+'</p></div></div><div class="card table-wrap"><table class="min-w-760"><thead><tr><th class="th">Rank</th><th class="th">Trader</th><th class="th text-right">Portfolio Value</th><th class="th text-right">Wallet Balance</th><th class="th text-right">Total Profit</th><th class="th text-right">Returns</th></tr></thead><tbody>'+board.map(function(r){return '<tr class="'+(r.username===me.username?'row-highlight':'')+'"><td class="td"><span class="'+medal(r.rank)+'">'+r.rank+'</span></td><td class="td"><span class="font-semibold text-white">@'+esc(r.username)+'</span>'+(r.username===me.username?' <span class="ml-2 text-10 text-sky font-bold">YOU</span>':'')+'</td><td class="td text-right">'+money(r.hold)+'</td><td class="td text-right">'+money(r.wallet)+'</td><td class="td text-right font-semibold '+plCls(r.profit)+'">'+(r.profit>=0?'+':'')+money(r.profit)+'</td><td class="td text-right font-semibold '+plCls(r.ret)+'">'+pct(r.ret)+'</td></tr>'}).join('')+'</tbody></table></div>';
+    var user;
+    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { user = null; }
+    if (!user) { window.location.replace('auth.html?mode=login'); }
+
+    if (user && user.role === 'admin') {
+      document.getElementById('admin-link').style.display = 'block';
+    }
+    document.getElementById('logout').onclick = function () {
+      localStorage.removeItem('batua_user');
+      window.location.href = 'index.html';
+    };
+    if (user) {
+      document.getElementById('user-name').textContent = user.full_name || user.username;
+      document.getElementById('user-role').textContent = '@' + user.username + ' · ' + user.role;
+      document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'U')[0].toUpperCase();
+    }
+
+    var STARTING_BONUS = 10000;
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function money(n, d) {
+      d = d === undefined ? 2 : d;
+      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function pct(n) {
+      return (Number(n || 0) >= 0 ? '+' : '') + Number(n || 0).toFixed(2) + '%';
+    }
+    function plCls(n) {
+      return Number(n || 0) >= 0 ? 'text-gain' : 'text-loss';
+    }
+    function medal(r) {
+      return r <= 3 ? 'medal medal-' + r : 'medal';
+    }
+
+    function showToast(msg, variant, durationMs) {
+      var type = variant || 'info';
+      var duration = durationMs || 4000;
+      var box = document.getElementById('toasts');
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.style.setProperty('--toast-duration', duration + 'ms');
+      el.innerHTML =
+        '<div class="toast-body">' +
+          '<p class="toast-title">Notice</p>' +
+          '<p class="text-slate-200">' + esc(msg) + '</p>' +
+        '</div>' +
+        '<button type="button" class="toast-close" aria-label="Close">&times;</button>' +
+        '<div class="toast-progress"></div>';
+      var closed = false;
+      function dismiss() {
+        if (closed) return;
+        closed = true;
+        el.classList.add('closing');
+        setTimeout(function () { el.remove(); }, 220);
+      }
+      el.querySelector('.toast-close').onclick = dismiss;
+      box.appendChild(el);
+      setTimeout(dismiss, duration);
+    }
+
+    async function loadLeaderboard() {
+      var tbody = document.getElementById('leaderboard-body');
+      try {
+        var res = await fetch('/api/leaderboard');
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load leaderboard');
+
+        var rawList = Array.isArray(data) ? data : (data.leaderboard || data.rows || []);
+        var board = rawList.map(function (r) {
+          var wallet = Number(r.wallet_balance != null ? r.wallet_balance : (r.balance || 0));
+          var hold = Number(r.portfolio_value != null ? r.portfolio_value : (r.holdings_value || 0));
+          var lent = Number(r.active_lent || 0);
+          var debt = Number(r.active_debt || 0);
+          var net = r.net_worth != null ? Number(r.net_worth) : (wallet + hold + lent - debt);
+          var profit = r.profit != null ? Number(r.profit) : (net - STARTING_BONUS);
+          var ret = r.returns_pct != null ? Number(r.returns_pct) : ((profit / STARTING_BONUS) * 100);
+
+          return {
+            user_id: String(r.user_id || ''),
+            username: r.username || 'trader',
+            full_name: r.full_name || '',
+            wallet: wallet,
+            hold: hold,
+            net: net,
+            profit: profit,
+            ret: ret
+          };
+        }).sort(function (a, b) {
+          return b.net - a.net;
+        }).map(function (r, idx) {
+          r.rank = idx + 1;
+          return r;
+        });
+
+        if (!board.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="td text-center text-slate-500">No active traders ranked yet.</td></tr>';
+          return;
+        }
+
+        var mine = board.find(function (r) {
+          return (r.user_id && r.user_id === String(user.user_id)) || r.username === user.username;
+        });
+
+        if (mine) {
+          document.getElementById('my-rank').textContent = '#' + mine.rank;
+          document.getElementById('my-net').textContent = money(mine.net) + ' VC';
+
+          var profEl = document.getElementById('my-profit');
+          profEl.textContent = (mine.profit >= 0 ? '+' : '') + money(mine.profit) + ' VC';
+          profEl.className = 'text-lg font-bold ' + plCls(mine.profit);
+
+          var retEl = document.getElementById('my-ret');
+          retEl.textContent = pct(mine.ret);
+          retEl.className = 'text-lg font-bold ' + plCls(mine.ret);
+        }
+
+        tbody.innerHTML = board.map(function (r) {
+          var isMe = (r.user_id && r.user_id === String(user.user_id)) || r.username === user.username;
+          return '<tr class="' + (isMe ? 'row-highlight' : '') + '">' +
+            '<td class="td"><span class="' + medal(r.rank) + '">' + r.rank + '</span></td>' +
+            '<td class="td">' +
+              '<span class="font-semibold text-white">@' + esc(r.username) + '</span>' +
+              (isMe ? ' <span class="ml-2 text-10 text-sky font-bold">YOU</span>' : '') +
+              (r.full_name ? '<p class="text-11 text-slate-500">' + esc(r.full_name) + '</p>' : '') +
+            '</td>' +
+            '<td class="td text-right text-slate-200">' + money(r.hold) + ' VC</td>' +
+            '<td class="td text-right text-slate-200">' + money(r.wallet) + ' VC</td>' +
+            '<td class="td text-right font-bold text-white">' + money(r.net) + ' VC</td>' +
+            '<td class="td text-right font-semibold ' + plCls(r.profit) + '">' + (r.profit >= 0 ? '+' : '') + money(r.profit) + ' VC</td>' +
+            '<td class="td text-right font-semibold ' + plCls(r.ret) + '">' + pct(r.ret) + '</td>' +
+          '</tr>';
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="7" class="td text-center text-loss">' + esc(err.message) + '</td></tr>';
+        showToast(err.message, 'info');
+      }
+    }
+
+    loadLeaderboard();
   </script>
 </body>
 </html>

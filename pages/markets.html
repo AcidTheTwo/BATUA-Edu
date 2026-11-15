@@ -26,7 +26,7 @@
       <a href="leaderboard.html" class="nav-link">Leaderboard</a>
       <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
     </nav>
-    <div class="sidebar-footer">&copy PRIMARY K's</div>
+    <div class="sidebar-footer">&copy; PRIMARY K's</div>
   </aside>
 
   <header class="topbar">
@@ -111,7 +111,7 @@
             <tr>
               <th class="th">Asset</th>
               <th class="th">Type</th>
-              <th class="th text-right">5m Trend</th>
+              <th class="th text-right">Live Price</th>
               <th class="th text-right">24h Change</th>
               <th class="th">Risk</th>
               <th class="th text-right">Action</th>
@@ -220,9 +220,6 @@
     var currentPosition = null;
     var orderInputMode = 'VC';
 
-    var FIVE_MIN_MS = 5 * 60 * 1000;
-    var sparkBuffers = {};
-
     function money(n, d) {
       d = d === undefined ? 2 : d;
       return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -261,98 +258,6 @@
       setTimeout(dismiss, duration);
     }
 
-    function recordSparkTick(symbol, price, ts) {
-      var now = ts || Date.now();
-      var px = Number(price || 0);
-      if (!px) return;
-
-      if (!sparkBuffers[symbol]) sparkBuffers[symbol] = [];
-      sparkBuffers[symbol].push({ t: now, p: px });
-
-      var cutoff = now - FIVE_MIN_MS;
-      while (sparkBuffers[symbol].length > 2 && sparkBuffers[symbol][0].t < cutoff) {
-        sparkBuffers[symbol].shift();
-      }
-    }
-
-    function getSparkSeries(symbol, fallbackPrice) {
-      var buf = sparkBuffers[symbol] || [];
-      if (buf.length >= 2) return buf.map(function (pt) { return pt.p; });
-      var base = buf.length === 1 ? buf[0].p : Number(fallbackPrice || 0);
-      return [base, base];
-    }
-
-    function buildSparkPoints(prices, width, height) {
-      var min = Math.min.apply(null, prices);
-      var max = Math.max.apply(null, prices);
-      var span = max - min;
-      var pad = 3;
-      var usableH = height - pad * 2;
-      var stepX = prices.length > 1 ? width / (prices.length - 1) : width;
-
-      return prices.map(function (p, i) {
-        var x = (i * stepX).toFixed(1);
-        var norm = span === 0 ? 0.5 : (p - min) / span;
-        var y = (height - pad - norm * usableH).toFixed(1);
-        return x + ',' + y;
-      }).join(' ');
-    }
-
-    function renderSparklineSVG(symbol, fallbackPrice) {
-      var prices = getSparkSeries(symbol, fallbackPrice);
-      var isUp = prices[prices.length - 1] >= prices[0];
-      var stroke = isUp ? '#4ade80' : '#f87171';
-      var pts = buildSparkPoints(prices, 104, 28);
-
-      return '<svg width="104" height="28" viewBox="0 0 104 28" style="display:block; overflow:visible;">' +
-        '<polyline id="spark-' + symbol + '" fill="none" stroke="' + stroke + '" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" points="' + pts + '" />' +
-      '</svg>';
-    }
-
-    function updateSparkline(symbol, newPrice) {
-      recordSparkTick(symbol, newPrice);
-      var poly = document.getElementById('spark-' + symbol);
-      if (!poly) return;
-
-      var prices = getSparkSeries(symbol, newPrice);
-      var isUp = prices[prices.length - 1] >= prices[0];
-      poly.setAttribute('points', buildSparkPoints(prices, 104, 28));
-      poly.setAttribute('stroke', isUp ? '#4ade80' : '#f87171');
-    }
-
-    function renderTable() {
-      var tbody = document.getElementById('rows');
-      if (filteredAssets.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="td text-center text-slate-500">No listed assets match your filter. Use the top-right box to look up any ticker.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = filteredAssets.map(function (a) {
-        var riskClass = a.risk === 'LOW' ? 'risk-low' : a.risk === 'MEDIUM' ? 'risk-medium' : 'risk-high';
-        var typeClass = a.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock';
-        var isSelected = selectedAsset && selectedAsset.asset_id === a.asset_id;
-
-        return '<tr class="clickable-row ' + (isSelected ? 'row-highlight' : '') + '" onclick="openDrawer(\'' + a.asset_id + '\', \'BUY\')">' +
-          '<td class="td">' +
-            '<p class="font-semibold text-white">' + a.symbol + '</p>' +
-            '<p class="text-11 text-slate-500">' + a.name + '</p>' +
-          '</td>' +
-          '<td class="td"><span class="badge ' + typeClass + '">' + a.asset_type + '</span></td>' +
-          '<td class="td text-right">' +
-            '<div style="display:inline-flex; flex-direction:column; align-items:flex-end; gap:2px;">' +
-              renderSparklineSVG(a.symbol, a.current_price) +
-              '<span id="px-' + a.symbol + '" class="text-11 text-slate-400 font-medium">' + money(a.current_price) + ' VC</span>' +
-            '</div>' +
-          '</td>' +
-          '<td id="chg-' + a.symbol + '" class="td text-right font-semibold ' + plCls(a.price_change) + '">' + pct(a.price_change) + '</td>' +
-          '<td class="td"><span class="badge ' + riskClass + '">' + a.risk + '</span></td>' +
-          '<td class="td text-right whitespace-nowrap" onclick="event.stopPropagation()">' +
-            '<button type="button" class="btn btn-gain btn-sm mr-2" onclick="openDrawer(\'' + a.asset_id + '\', \'BUY\')">Buy</button>' +
-            '<button type="button" class="btn btn-loss btn-sm" onclick="openDrawer(\'' + a.asset_id + '\', \'SELL\')">Sell</button>' +
-          '</td>' +
-        '</tr>';
-      }).join('');
-    }
-
     var FEATURED_SYMBOLS = new Set([
       'BTC', 'ETH', 'SOL', 'USDT',
       'AAPL', 'GOOGL', 'MSFT', 'TSLA',
@@ -389,43 +294,41 @@
     document.getElementById('f-risk').addEventListener('change', applyFilters);
     document.getElementById('f-sort').addEventListener('change', applyFilters);
 
-    async function seedSparklineHistory(asset) {
-      try {
-        var res = await fetch('/api/assets/' + encodeURIComponent(asset.asset_id) + '/history?range=1D');
-        if (!res.ok) return;
-        var hist = await res.json();
-        var recent = (hist.prices || []).slice(-10);
-        if (recent.length >= 2) {
-          var now = Date.now();
-          var step = Math.floor(FIVE_MIN_MS / recent.length);
-          sparkBuffers[asset.symbol] = recent.map(function (p, idx) {
-            return { t: now - (recent.length - idx) * step, p: Number(p) };
-          });
-          recordSparkTick(asset.symbol, asset.current_price, now);
-          updateSparkline(asset.symbol, asset.current_price);
-        }
-      } catch (_) {}
+    function renderTable() {
+      var tbody = document.getElementById('rows');
+      if (filteredAssets.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="td text-center text-slate-500">No listed assets match your filter. Use the top-right box to look up any ticker.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = filteredAssets.map(function (a) {
+        var riskClass = a.risk === 'LOW' ? 'risk-low' : a.risk === 'MEDIUM' ? 'risk-medium' : 'risk-high';
+        var typeClass = a.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock';
+        var isSelected = selectedAsset && selectedAsset.asset_id === a.asset_id;
+
+        return '<tr class="clickable-row ' + (isSelected ? 'row-highlight' : '') + '" onclick="openDrawer(\'' + a.asset_id + '\', \'BUY\')">' +
+          '<td class="td">' +
+          '<p class="font-semibold text-white">' + a.symbol + '</p>' +
+          '<p class="text-11 text-slate-500">' + a.name + '</p>' +
+          '</td>' +
+          '<td class="td"><span class="badge ' + typeClass + '">' + a.asset_type + '</span></td>' +
+          '<td id="px-' + a.symbol + '" class="td text-right font-medium">' + money(a.current_price) + ' VC</td>' +
+          '<td id="chg-' + a.symbol + '" class="td text-right font-semibold ' + plCls(a.price_change) + '">' + pct(a.price_change) + '</td>' +
+          '<td class="td"><span class="badge ' + riskClass + '">' + a.risk + '</span></td>' +
+          '<td class="td text-right whitespace-nowrap" onclick="event.stopPropagation()">' +
+          '<button type="button" class="btn btn-gain btn-sm mr-2" onclick="openDrawer(\'' + a.asset_id + '\', \'BUY\')">Buy</button>' +
+          '<button type="button" class="btn btn-loss btn-sm" onclick="openDrawer(\'' + a.asset_id + '\', \'SELL\')">Sell</button>' +
+          '</td>' +
+          '</tr>';
+      }).join('');
     }
 
     async function loadAssets() {
       try {
         var res = await fetch('/api/assets');
-        allAssets = await res.json();
-
-        allAssets.forEach(function (a) {
-          if (!sparkBuffers[a.symbol] || sparkBuffers[a.symbol].length === 0) {
-            recordSparkTick(a.symbol, a.current_price, Date.now() - 1000);
-            recordSparkTick(a.symbol, a.current_price, Date.now());
-          }
-        });
-
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load assets');
+        allAssets = data;
         applyFilters();
-
-        allAssets.forEach(function (a, idx) {
-          setTimeout(function () {
-            seedSparklineHistory(a);
-          }, idx * 100);
-        });
       } catch (err) {
         document.getElementById('rows').innerHTML =
           '<tr><td colspan="6" class="td text-center text-loss">Failed to load assets.</td></tr>';
@@ -586,18 +489,18 @@
         } else {
           box.innerHTML =
             '<div class="flex justify-between text-xs mb-1">' +
-              '<span class="text-slate-400">Your Holdings</span>' +
-              '<span class="font-semibold text-white">' + Number(currentPosition.qty).toFixed(6) + ' ' + selectedAsset.symbol + '</span>' +
+            '<span class="text-slate-400">Your Holdings</span>' +
+            '<span class="font-semibold text-white">' + Number(currentPosition.qty).toFixed(6) + ' ' + selectedAsset.symbol + '</span>' +
             '</div>' +
             '<div class="flex justify-between text-xs mb-1">' +
-              '<span class="text-slate-400">Amount Invested</span>' +
-              '<span class="text-slate-200">' + money(currentPosition.invested) + ' VC (Avg ' + money(currentPosition.avg_price) + ')</span>' +
+            '<span class="text-slate-400">Amount Invested</span>' +
+            '<span class="text-slate-200">' + money(currentPosition.invested) + ' VC (Avg ' + money(currentPosition.avg_price) + ')</span>' +
             '</div>' +
             '<div class="flex justify-between text-xs">' +
-              '<span class="text-slate-400">Current Value &amp; P&amp;L</span>' +
-              '<span class="font-semibold ' + plCls(currentPosition.pl) + '">' +
-                money(currentPosition.current_value) + ' VC (' + (currentPosition.pl >= 0 ? '+' : '') + money(currentPosition.pl) + ')' +
-              '</span>' +
+            '<span class="text-slate-400">Current Value &amp; P&amp;L</span>' +
+            '<span class="font-semibold ' + plCls(currentPosition.pl) + '">' +
+            money(currentPosition.current_value) + ' VC (' + (currentPosition.pl >= 0 ? '+' : '') + money(currentPosition.pl) + ')' +
+            '</span>' +
             '</div>';
         }
         renderTradeForm();
@@ -660,30 +563,30 @@
 
       var presetsHtml = hasBalance
         ? '<div class="grid gap-2 mt-2" style="grid-template-columns: repeat(4, minmax(0, 1fr));">' +
-            '<button type="button" class="range-btn" onclick="fillOrderPct(0.10)">10%</button>' +
-            '<button type="button" class="range-btn" onclick="fillOrderPct(0.25)">25%</button>' +
-            '<button type="button" class="range-btn" onclick="fillOrderPct(0.50)">50%</button>' +
-            '<button type="button" class="range-btn" onclick="fillOrderPct(1)">Max</button>' +
-          '</div>'
+        '<button type="button" class="range-btn" onclick="fillOrderPct(0.10)">10%</button>' +
+        '<button type="button" class="range-btn" onclick="fillOrderPct(0.25)">25%</button>' +
+        '<button type="button" class="range-btn" onclick="fillOrderPct(0.50)">50%</button>' +
+        '<button type="button" class="range-btn" onclick="fillOrderPct(1)">Max</button>' +
+        '</div>'
         : '';
 
       var body = document.getElementById('trade-body');
       body.innerHTML =
         '<div class="flex justify-between items-center mb-1">' +
-          '<label class="text-xs text-slate-400">' + labelText + '</label>' +
-          '<div class="flex items-center gap-2">' +
-            '<button type="button" class="range-btn ' + (isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'VC\')">VC</button>' +
-            '<button type="button" class="range-btn ' + (!isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'UNITS\')">' + selectedAsset.symbol + '</button>' +
-          '</div>' +
+        '<label class="text-xs text-slate-400">' + labelText + '</label>' +
+        '<div class="flex items-center gap-2">' +
+        '<button type="button" class="range-btn ' + (isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'VC\')">VC</button>' +
+        '<button type="button" class="range-btn ' + (!isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'UNITS\')">' + selectedAsset.symbol + '</button>' +
+        '</div>' +
         '</div>' +
         '<input id="trade-val" class="input mt-1" type="number" min="0" step="any" placeholder="' + placeholderText + '">' +
         presetsHtml +
         '<div class="sub-box text-xs mt-3 flex justify-between">' +
-          '<span class="text-slate-500">' + estLabel + '</span>' +
-          '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
+        '<span class="text-slate-500">' + estLabel + '</span>' +
+        '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
         '</div>' +
         '<button id="exec-btn" class="btn ' + (isBuy ? 'btn-gain' : 'btn-loss') + ' btn-full mt-3" onclick="executeOrder()">' +
-          (isBuy ? 'Buy ' : 'Sell ') + selectedAsset.symbol +
+        (isBuy ? 'Buy ' : 'Sell ') + selectedAsset.symbol +
         '</button>';
 
       document.getElementById('trade-val').oninput = function () {
@@ -755,14 +658,15 @@
 
     var evtSource = new EventSource('/api/stream');
     evtSource.onmessage = function (e) {
-      var tick = JSON.parse(e.data);
+      var tick;
+      try { tick = JSON.parse(e.data); } catch (_) { return; }
+      if (!tick || !tick.symbol) return;
+
       var item = allAssets.find(function (a) { return a.symbol === tick.symbol; });
       if (item) {
         item.current_price = tick.current_price;
         item.price_change = tick.price_change;
       }
-
-      updateSparkline(tick.symbol, tick.current_price);
 
       var pxEl = document.getElementById('px-' + tick.symbol);
       var chgEl = document.getElementById('chg-' + tick.symbol);
@@ -788,4 +692,5 @@
     loadAssets();
   </script>
 </body>
+
 </html>
