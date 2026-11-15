@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Profile &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app-main"><div class="container" id="page"></div></main>
+  <script>
+    function getUser(){try{return JSON.parse(localStorage.getItem('batua_user')||'null')}catch(e){return null}}
+    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+    function dtF(s){return new Date(s).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+    function toast(m,t){
+  var b=document.getElementById('toasts');
+  if(!b){b=document.createElement('div');b.id='toasts';b.className='toast-container';document.body.appendChild(b)}
+  var e=document.createElement('div');
+  e.className='card toast '+(t==='success'?'toast-success':'toast-error');
+  e.textContent=m;
+  b.appendChild(e);
+  setTimeout(function(){e.remove()},4000);
+}
+    var NAV=[['dashboard.html','Dashboard'],['markets.html','Markets'],['portfolio.html','My Portfolio'],['wallet.html','Wallet'],['transactions.html','Transactions'],['transfers.html','P2P Transfers'],['lending.html','Lending & Borrowing'],['leaderboard.html','Leaderboard'],['profile.html','Profile']];
+function shell(active){
+  var u=getUser();
+  if(!u){location.href='login.html';return null}
+  var links=NAV.slice();
+  if(u.role==='admin')links.push(['admin.html','Admin Panel']);
+  var sb='<aside id="sb" class="sidebar"><div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div><nav class="sidebar-nav">'+links.map(function(l){return '<a href="'+l[0]+'" class="nav-link'+(l[0]===active?' active':'')+'">'+l[1]+'</a>'}).join('')+'<a href="login.html" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a></nav></aside>';
+  var tb='<header class="topbar"><div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button><span class="badge-mock">MOCK PREVIEW</span></div><div class="topbar-right"><div class="user-meta"><p class="user-meta-name">'+esc(u.full_name)+'</p><p class="user-meta-sub">@'+esc(u.username)+' &middot; '+esc(u.role)+'</p></div><div class="avatar">'+esc((u.full_name||'U')[0].toUpperCase())+'</div></div></header>';
+  document.body.insertAdjacentHTML('afterbegin',sb+tb);
+  return u;
+}
+    var u=shell('profile.html');
+    var rows=[['User ID','#'+u.user_id],['Full name',u.full_name],['Username','@'+u.username],['Email',u.email],['Role',u.role.toUpperCase()],['Member since',dtF(Date.now()-38*864e5)]].map(function(r){return '<div class="profile-row"><span class="text-slate-500">'+r[0]+'</span><span class="font-medium text-slate-200">'+esc(r[1])+'</span></div>'}).join('');
+    document.getElementById('page').innerHTML='<div class="page-header"><h1 class="page-title">Profile</h1><p class="page-subtitle">Your account details.</p></div><div class="grid lg-grid-2 gap-4"><div class="card p-5"><h3 class="font-semibold mb-4">Account</h3><div class="space-y-3 text-sm">'+rows+'</div></div><div class="card p-5"><h3 class="font-semibold mb-4">Change Password</h3><div class="space-y-3"><input id="cur" class="input" type="password" placeholder="Current password"><input id="next" class="input" type="password" placeholder="New password (min 8 chars)"><button class="btn btn-primary" onclick="chpw()">Update password</button></div><div class="divider-top"><h3 class="font-semibold mb-2 text-sm">Demo data</h3><p class="text-xs text-slate-500 mb-3">Reset your portfolio, wallet and transactions back to the seeded demo state.</p><button class="btn btn-ghost" onclick="resetDemo()">Reset demo data</button></div></div></div>';
+    function chpw(){if(!document.getElementById('cur').value||document.getElementById('next').value.length<8)return toast('Provide current password and a new password (min 8 chars).');toast('Password updated successfully.','success');document.getElementById('cur').value='';document.getElementById('next').value=''}
+    function resetDemo(){localStorage.removeItem('batua_state_v1');toast('Demo data reset. Refresh any page to see seeded values.','success')}
+  </script>
+</body>
+</html>
