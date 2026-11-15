@@ -236,6 +236,76 @@ p, h1, h2, h3 {
   font-weight: 700;
 }
 
+/* Topbar User Hover Dropdown */
+.user-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s;
+}
+
+.user-menu:hover {
+  background-color: rgba(214, 194, 163, 0.08);
+}
+
+.user-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  padding-top: 0.45rem;
+  min-width: 11rem;
+  display: none;
+  z-index: 60;
+}
+
+.user-menu:hover .user-dropdown,
+.user-menu:focus-within .user-dropdown {
+  display: block;
+}
+
+.user-dropdown-panel {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0.6rem;
+  padding: 0.35rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-main);
+  background: transparent;
+  border: none;
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background-color 0.15s;
+}
+
+.dropdown-item:hover {
+  background-color: var(--bg-card);
+}
+
+.dropdown-item-danger {
+  color: var(--accent-red);
+}
+
+.dropdown-item-danger:hover {
+  background-color: rgba(248, 113, 113, 0.12);
+}
+
 /* Main Content Layout */
 .app-main {
   padding-top: 4rem;
