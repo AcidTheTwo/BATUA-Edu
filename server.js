@@ -51,6 +51,33 @@ async function generateUniqueRandomId(executor, tableName, columnName, prefix) {
   throw new Error(`Unable to generate unique ${prefix} ID after multiple attempts.`);
 }
 
+// Middleware: block locked/blocked users from trading, P2P swaps, cash transfers, and pool actions
+async function blockIfLocked(req, res, next) {
+  try {
+    const actorId =
+      req.body?.user_id ||
+      req.body?.maker_id ||
+      req.body?.sender_id ||
+      req.headers['x-user-id'];
+
+    if (!actorId) return next();
+
+    const [rows] = await pool.query(
+      'SELECT account_status FROM users WHERE user_id = ? LIMIT 1',
+      [String(actorId)]
+    );
+
+    if (rows.length && rows[0].account_status === 'BLOCKED') {
+      return res.status(403).json({
+        error: 'Your account is currently locked by an administrator. Trading, swaps, and transfers are disabled.'
+      });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 // In-memory state populated dynamically from the MySQL `assets` table
 const liveState = {};       // symbol -> { asset_id, symbol, name, asset_type, finnhub, price, prevClose, changePct, risk }
 const finnhubToSymbol = {}; // 'BINANCE:BTCUSDT' -> 'BTC'
@@ -354,6 +381,7 @@ app.post('/api/auth/register', async (req, res) => {
         full_name: fullName,
         email: cleanEmail,
         role: 'user',
+        account_status: 'ACTIVE',
         wallet_id: walletId,
         balance: initialBalance
       }
@@ -370,7 +398,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// POST /api/auth/login — Authenticate by username or email
+// POST /api/auth/login — Authenticate by username or email (allows BLOCKED users read-only login)
 app.post('/api/auth/login', async (req, res) => {
   const { identifier, password } = req.body || {};
   const cleanId = (identifier || '').trim();
@@ -396,7 +424,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const row = rows[0];
-    if (row.account_status !== 'ACTIVE') {
+    if (!['ACTIVE', 'BLOCKED'].includes(row.account_status)) {
       return res.status(403).json({ error: `Account is ${row.account_status.toLowerCase()}. Contact an admin.` });
     }
 
@@ -416,6 +444,7 @@ app.post('/api/auth/login', async (req, res) => {
         full_name: fullName,
         email: row.email,
         role: row.role.toLowerCase(),
+        account_status: row.account_status,
         wallet_id: row.wallet_id,
         balance: Number(row.balance || 0)
       }
@@ -489,7 +518,7 @@ app.post('/api/assets/lookup', async (req, res) => {
     if (existing.length > 0) {
       const row = existing[0];
       if (!row.is_active) {
-        await pool.query('UPDATE assets SET is_active = 1 WHERE asset_id = ?', [row.asset_id]);
+        return res.status(403).json({ error: `${row.symbol} is currently disabled by an administrator.` });
       }
       const live = liveState[row.symbol];
       return res.json({
@@ -758,7 +787,7 @@ app.get('/api/assets/:id/history', async (req, res) => {
 // API: Get live platform statistics for landing page section-band
 app.get('/api/stats', async (req, res) => {
   try {
-    const [[{ traders }]] = await pool.query('SELECT COUNT(*) AS traders FROM users');
+    const [[{ traders }]] = await pool.query("SELECT COUNT(*) AS traders FROM users WHERE role = 'USER'");
     const [[{ assets }]] = await pool.query('SELECT COUNT(*) AS assets FROM assets WHERE is_active = 1');
     const [[{ trades, volume }]] = await pool.query(
       'SELECT COUNT(*) AS trades, COALESCE(SUM(total_amount), 0) AS volume FROM trade'
@@ -871,7 +900,7 @@ app.get('/api/dashboard/:userId', async (req, res) => {
       `SELECT u.user_id, COALESCE(w.balance, 0) AS cash
        FROM users u
        LEFT JOIN wallets w ON u.user_id = w.user_id
-       WHERE u.account_status = 'ACTIVE'`
+       WHERE u.account_status = 'ACTIVE' AND u.role = 'USER'`
     );
     const [allHoldings] = await pool.query(
       `SELECT p.user_id, p.total_fraction_owned, a.symbol, a.current_price
@@ -1008,7 +1037,7 @@ app.get('/api/portfolio/:userId/asset/:assetId', async (req, res) => {
 });
 
 // POST /api/trades/buy — ACID fractional/whole asset purchase (ordered TRD0000001)
-app.post('/api/trades/buy', async (req, res) => {
+app.post('/api/trades/buy', blockIfLocked, async (req, res) => {
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const assetId = parsePrefixedId(req.body?.asset_id, 'AST');
   const amount = Number(req.body?.amount);
@@ -1120,7 +1149,7 @@ app.post('/api/trades/buy', async (req, res) => {
 });
 
 // POST /api/trades/sell — ACID fractional/whole asset sale (ordered TRD0000001)
-app.post('/api/trades/sell', async (req, res) => {
+app.post('/api/trades/sell', blockIfLocked, async (req, res) => {
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const assetId = parsePrefixedId(req.body?.asset_id, 'AST');
   const sellQty = Number(req.body?.quantity);
@@ -1279,7 +1308,7 @@ app.get('/api/users/verify/:username', async (req, res) => {
       return res.status(400).json({ error: 'You cannot transfer assets to yourself.' });
     }
     if (u.account_status !== 'ACTIVE') {
-      return res.status(403).json({ error: 'Recipient account is not active.' });
+      return res.status(403).json({ error: 'Recipient account is locked or inactive.' });
     }
 
     const fullName = [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' ');
@@ -1356,7 +1385,7 @@ app.get('/api/p2p/rooms/:userId', async (req, res) => {
 });
 
 // POST /api/p2p/invite — Step 1: Maker invites Taker
-app.post('/api/p2p/invite', async (req, res) => {
+app.post('/api/p2p/invite', blockIfLocked, async (req, res) => {
   const makerId = parsePrefixedId(req.body?.maker_id, 'USR');
   const takerUsername = (req.body?.taker_username || '').trim();
   if (!makerId || !takerUsername) return res.status(400).json({ error: 'Enter recipient username.' });
@@ -1368,7 +1397,7 @@ app.post('/api/p2p/invite', async (req, res) => {
     if (!maker || tRows.length === 0) return res.status(404).json({ error: `User "@${takerUsername}" not found.` });
     const taker = tRows[0];
     if (taker.user_id === makerId) return res.status(400).json({ error: 'Cannot trade with yourself.' });
-    if (taker.account_status !== 'ACTIVE') return res.status(403).json({ error: 'Recipient account is not active.' });
+    if (taker.account_status !== 'ACTIVE') return res.status(403).json({ error: `@${taker.username}'s account is locked and cannot participate in P2P trades.` });
 
     for (const r of p2pRooms.values()) {
       if (!['SETTLED', 'CLOSED'].includes(r.status)) {
@@ -1403,7 +1432,7 @@ app.post('/api/p2p/invite', async (req, res) => {
 });
 
 // POST /api/p2p/:roomId/respond-invite — Step 2: Taker accepts (locks live prices) or declines
-app.post('/api/p2p/:roomId/respond-invite', async (req, res) => {
+app.post('/api/p2p/:roomId/respond-invite', blockIfLocked, async (req, res) => {
   const roomId = Number(req.params.roomId);
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const accept = Boolean(req.body?.accept);
@@ -1439,7 +1468,7 @@ app.post('/api/p2p/:roomId/respond-invite', async (req, res) => {
 });
 
 // POST /api/p2p/:roomId/submit-offer — Step 3 / Step 5: Submit 1 asset + qty
-app.post('/api/p2p/:roomId/submit-offer', async (req, res) => {
+app.post('/api/p2p/:roomId/submit-offer', blockIfLocked, async (req, res) => {
   const roomId = Number(req.params.roomId);
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const assetId = parsePrefixedId(req.body?.asset_id, 'AST');
@@ -1516,7 +1545,7 @@ app.post('/api/p2p/:roomId/submit-offer', async (req, res) => {
 });
 
 // POST /api/p2p/:roomId/review — Step 4 / Step 6 & 7: Accept, Reject, or Leave
-app.post('/api/p2p/:roomId/review', async (req, res) => {
+app.post('/api/p2p/:roomId/review', blockIfLocked, async (req, res) => {
   const roomId = Number(req.params.roomId);
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const decision = req.body?.decision; // 'ACCEPT' | 'REJECT' | 'LEAVE'
@@ -1899,7 +1928,7 @@ app.get('/api/wallets/:userId/overview', async (req, res) => {
 });
 
 // POST /api/transfers/cash — ACID Peer-to-Peer VC Transfer
-app.post('/api/transfers/cash', async (req, res) => {
+app.post('/api/transfers/cash', blockIfLocked, async (req, res) => {
   const senderId = parsePrefixedId(req.body?.sender_id, 'USR');
   const recipientUsername = (req.body?.recipient_username || '').trim();
   const amount = Number(req.body?.amount);
@@ -1939,7 +1968,7 @@ app.post('/api/transfers/cash', async (req, res) => {
     }
     if (recipient.account_status !== 'ACTIVE') {
       await conn.rollback();
-      return res.status(403).json({ error: 'Recipient account is not active.' });
+      return res.status(403).json({ error: 'Recipient account is locked or inactive.' });
     }
 
     // Lock both wallets in deterministic lexicographical user_id order to prevent deadlocks
@@ -1994,7 +2023,7 @@ app.post('/api/transfers/cash', async (req, res) => {
 });
 
 // POST /api/pool/lend — Supply idle VC to Central Credit Pool (6% p.a., random LNDNNNNNNN)
-app.post('/api/pool/lend', async (req, res) => {
+app.post('/api/pool/lend', blockIfLocked, async (req, res) => {
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const amount = Number(req.body?.amount);
   if (!userId || !Number.isFinite(amount) || amount <= 0) {
@@ -2048,7 +2077,7 @@ app.post('/api/pool/lend', async (req, res) => {
 });
 
 // POST /api/pool/redeem — Redeem unborrowed pool liquidity + accrued interest
-app.post('/api/pool/redeem', async (req, res) => {
+app.post('/api/pool/redeem', blockIfLocked, async (req, res) => {
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const lendingId = parsePrefixedId(req.body?.lending_id, 'LND');
   if (!userId || !lendingId) return res.status(400).json({ error: 'Invalid redeem request.' });
@@ -2107,7 +2136,7 @@ app.post('/api/pool/redeem', async (req, res) => {
 });
 
 // POST /api/pool/borrow — Borrow from Central Credit Pool against 50% Portfolio LTV (12% p.a., random LONNNNNNNN)
-app.post('/api/pool/borrow', async (req, res) => {
+app.post('/api/pool/borrow', blockIfLocked, async (req, res) => {
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const amount = Number(req.body?.amount);
   if (!userId || !Number.isFinite(amount) || amount <= 0) {
@@ -2212,7 +2241,7 @@ app.post('/api/pool/borrow', async (req, res) => {
 });
 
 // POST /api/pool/repay — Repay loan (12% p.a.): 6% yield to lender, 6% spread retained in Credit Pool reserve
-app.post('/api/pool/repay', async (req, res) => {
+app.post('/api/pool/repay', blockIfLocked, async (req, res) => {
   const userId = parsePrefixedId(req.body?.user_id, 'USR');
   const loanId = parsePrefixedId(req.body?.loan_id, 'LON');
   if (!userId || !loanId) return res.status(400).json({ error: 'Invalid repayment request.' });
@@ -2563,6 +2592,7 @@ app.put('/api/profile/:userId/password', async (req, res) => {
   }
 });
 
+// GET /api/leaderboard — Excludes ADMIN accounts and LOCKED/BLOCKED users
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const [rows] = await pool.query(`
@@ -2605,7 +2635,7 @@ app.get('/api/leaderboard', async (req, res) => {
         WHERE loan_status = 'ACTIVE'
         GROUP BY borrower_id
       ) ln ON ln.user_id = u.user_id
-      WHERE u.account_status = 'ACTIVE'
+      WHERE u.account_status = 'ACTIVE' AND u.role = 'USER'
       ORDER BY net_worth DESC
     `);
 
@@ -2613,6 +2643,156 @@ app.get('/api/leaderboard', async (req, res) => {
   } catch (err) {
     console.error('Leaderboard error:', err);
     res.status(500).json({ error: 'Failed to fetch leaderboard standings.' });
+  }
+});
+
+// =========================================================
+// ADMIN CONSOLE ENDPOINTS
+// =========================================================
+
+// Middleware: verify requester is an active ADMIN
+async function requireAdmin(req, res, next) {
+  try {
+    const adminId = req.headers['x-admin-id'] || req.body?.admin_id || req.query?.admin_id;
+    if (!adminId) return res.status(401).json({ error: 'Admin authentication required.' });
+
+    const [rows] = await pool.query(
+      'SELECT user_id, role, account_status FROM users WHERE user_id = ? LIMIT 1',
+      [String(adminId)]
+    );
+    if (!rows.length || String(rows[0].role).toUpperCase() !== 'ADMIN' || rows[0].account_status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Admin privileges required.' });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// 1. GET full user directory (explicitly excluding password_hash)
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const [users] = await pool.query(`
+      SELECT
+        u.user_id,
+        u.username,
+        CONCAT_WS(' ', u.first_name, NULLIF(u.middle_name, ''), u.last_name) AS full_name,
+        u.email,
+        LOWER(u.role) AS role,
+        IF(u.account_status = 'BLOCKED', 'LOCKED', u.account_status) AS status,
+        u.created_on AS created_at,
+        w.wallet_id,
+        COALESCE(w.balance, 0) AS wallet_balance,
+        COUNT(DISTINCT p.asset_id) AS holdings_count,
+        COALESCE(SUM(p.total_fraction_owned * a.current_price), 0) AS holdings_value
+      FROM users u
+      LEFT JOIN wallets w ON w.user_id = u.user_id
+      LEFT JOIN portfolio p ON p.user_id = u.user_id AND p.total_fraction_owned > 0
+      LEFT JOIN assets a ON a.asset_id = p.asset_id
+      GROUP BY u.user_id, u.username, u.first_name, u.middle_name, u.last_name, u.email, u.role, u.account_status, u.created_on, w.wallet_id, w.balance
+      ORDER BY u.created_on DESC
+    `);
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. PATCH lock / unlock user account (maps LOCKED <-> BLOCKED in users.account_status)
+app.patch('/api/admin/users/:userId/status', requireAdmin, async (req, res) => {
+  try {
+    const targetId = String(req.params.userId);
+    const reqStatus = String(req.body.status || '').toUpperCase();
+    if (!['ACTIVE', 'LOCKED', 'BLOCKED'].includes(reqStatus)) {
+      return res.status(400).json({ error: 'Invalid status. Use ACTIVE or LOCKED.' });
+    }
+    if (targetId === String(req.headers['x-admin-id'])) {
+      return res.status(400).json({ error: 'You cannot lock your own admin account.' });
+    }
+
+    const dbStatus = reqStatus === 'LOCKED' ? 'BLOCKED' : reqStatus;
+    await pool.query('UPDATE users SET account_status = ? WHERE user_id = ?', [dbStatus, targetId]);
+    res.json({ message: `User ${targetId} is now ${reqStatus}.`, status: reqStatus });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. GET all tracked assets (including disabled ones)
+app.get('/api/admin/assets', requireAdmin, async (req, res) => {
+  try {
+    const [assets] = await pool.query(`
+      SELECT asset_id, symbol, name, asset_type, risk, current_price, price_change, is_active
+      FROM assets
+      ORDER BY is_active DESC, symbol ASC
+    `);
+    res.json(assets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. PATCH enable / disable an asset
+app.patch('/api/admin/assets/:assetId/status', requireAdmin, async (req, res) => {
+  try {
+    const assetId = String(req.params.assetId);
+    const isActive = req.body.is_active ? 1 : 0;
+    await pool.query('UPDATE assets SET is_active = ? WHERE asset_id = ?', [isActive, assetId]);
+    res.json({
+      message: `Asset ${assetId} ${isActive ? 'enabled' : 'disabled'}.`,
+      is_active: isActive
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. POST bulk add assets (generates random ASTNNNNNNN IDs)
+app.post('/api/admin/assets/bulk', requireAdmin, async (req, res) => {
+  const items = Array.isArray(req.body.assets) ? req.body.assets : [];
+  if (!items.length) return res.status(400).json({ error: 'Provide at least one asset.' });
+
+  const results = { added: [], skipped: [] };
+
+  try {
+    for (const raw of items) {
+      const symbol = String(raw.symbol || '').trim().toUpperCase();
+      const name = String(raw.name || symbol).trim();
+      const assetType = ['STOCK', 'CRYPTO', 'OTHER'].includes(String(raw.asset_type).toUpperCase())
+        ? String(raw.asset_type).toUpperCase()
+        : 'STOCK';
+      const risk = ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'].includes(String(raw.risk).toUpperCase())
+        ? String(raw.risk).toUpperCase()
+        : 'MEDIUM';
+      const price = Number(raw.current_price || 0);
+
+      if (!symbol) continue;
+
+      const [existing] = await pool.query('SELECT asset_id FROM assets WHERE symbol = ? LIMIT 1', [symbol]);
+      if (existing.length) {
+        results.skipped.push({ symbol, reason: 'Already exists' });
+        continue;
+      }
+
+      const assetId = await generateUniqueRandomId(pool, 'assets', 'asset_id', 'AST');
+      await pool.query(
+        `INSERT INTO assets (asset_id, symbol, name, asset_type, risk, current_price, price_change, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, 0, 1)`,
+        [assetId, symbol, name, assetType, risk, price]
+      );
+      results.added.push({ asset_id: assetId, symbol, name });
+    }
+
+    if (results.added.length && process.env.FINNHUB_API_KEY) {
+      syncSnapshotsToDb(process.env.FINNHUB_API_KEY).catch(() => {});
+    }
+
+    res.json({
+      message: `Added ${results.added.length} asset(s), skipped ${results.skipped.length}.`,
+      results
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

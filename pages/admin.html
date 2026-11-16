@@ -1,81 +1,677 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Panel &middot; BATUA-Edu</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <main class="app-main"><div class="container" id="page"></div></main>
-  <div id="modal" class="modal-backdrop">
-    <div class="card modal-box p-5 space-y-3">
-      <h3 class="font-bold text-white" id="mtitle">List New Asset</h3>
-      <input id="msym" class="input" placeholder="Symbol (e.g. LINK)">
-      <input id="mname" class="input" placeholder="Name">
-      <input id="mprice" class="input" type="number" step="any" placeholder="Listing price (TUA)">
-      <div class="grid grid-2 gap-3">
-        <select id="mtype" class="input"><option value="STOCK">STOCK</option><option value="CRYPTO">CRYPTO</option></select>
-        <select id="mrisk" class="input"><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option></select>
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">B</div>
+      <span class="brand-text">BATUA<span>-Edu</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="markets.html" class="nav-link">Markets</a>
+      <a href="portfolio.html" class="nav-link">My Portfolio</a>
+      <a href="wallets.html" class="nav-link">Wallet</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+      <a id="admin-link" href="admin.html" class="nav-link active">Admin Panel</a>
+    </nav>
+    <div class="sidebar-footer">&copy; PRIMARY K's</div>
+  </aside>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
+      <span class="badge badge-sky">ADMIN CONSOLE</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-menu" tabindex="0">
+        <div class="user-meta">
+          <p class="user-meta-name" id="user-name">Loading...</p>
+          <p class="user-meta-sub" id="user-role">admin</p>
+        </div>
+        <div class="avatar" id="user-avatar">A</div>
+        <div class="user-dropdown">
+          <div class="user-dropdown-panel">
+            <a href="profile.html" class="dropdown-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Profile
+            </a>
+            <button id="logout" type="button" class="dropdown-item dropdown-item-danger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="flex gap-2 pt-2">
-        <button class="btn btn-primary flex-1" onclick="saveAsset()">Save</button>
-        <button class="btn btn-ghost flex-1" onclick="closeModal()">Cancel</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="container">
+      <div class="page-header-row">
+        <div>
+          <h1 class="page-title">System Administration</h1>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="loadAllAdminData()">Refresh</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="openBulkModal()">+ Bulk Add Assets</button>
+        </div>
+      </div>
+
+      <!-- KPI Strip -->
+      <div class="grid grid-2 md-grid-4 gap-3 mb-4">
+        <div class="card p-4">
+          <p class="text-xs text-slate-500">Registered Users</p>
+          <p id="stat-users" class="text-2xl font-extrabold text-white mt-1">0</p>
+        </div>
+        <div class="card p-4">
+          <p class="text-xs text-slate-500">Locked Accounts</p>
+          <p id="stat-locked" class="text-2xl font-extrabold text-loss mt-1">0</p>
+        </div>
+        <div class="card p-4">
+          <p class="text-xs text-slate-500">Active Assets</p>
+          <p id="stat-assets-active" class="text-2xl font-extrabold text-gain mt-1">0</p>
+        </div>
+        <div class="card p-4">
+          <p class="text-xs text-slate-500">Disabled Assets</p>
+          <p id="stat-assets-disabled" class="text-2xl font-extrabold text-slate-400 mt-1">0</p>
+        </div>
+      </div>
+
+      <!-- Section Tabs -->
+      <div class="flex gap-2 mb-4">
+        <button id="tab-users" type="button" class="btn btn-primary btn-sm" onclick="switchTab('users')">
+          Users Directory
+        </button>
+        <button id="tab-assets" type="button" class="btn btn-ghost btn-sm" onclick="switchTab('assets')">
+          Tracked Assets
+        </button>
+      </div>
+
+      <!-- USERS DIRECTORY PANEL -->
+      <div id="panel-users">
+        <div class="card p-4 grid md-grid-3 gap-3 mb-4">
+          <input id="u-search" class="input" placeholder="Search ID, username, name, email...">
+          <select id="u-role" class="input">
+            <option value="">All roles</option>
+            <option value="user">Standard Users</option>
+            <option value="admin">Admins</option>
+          </select>
+          <select id="u-status" class="input">
+            <option value="">All account statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="LOCKED">Locked</option>
+          </select>
+        </div>
+
+        <div class="card table-wrap">
+          <table class="min-w-760">
+            <thead>
+              <tr>
+                <th class="th">User</th>
+                <th class="th">Email &amp; Wallet</th>
+                <th class="th text-right">Cash Balance</th>
+                <th class="th text-right">Holdings Value</th>
+                <th class="th">Role</th>
+                <th class="th">Status</th>
+                <th class="th text-right">Account Control</th>
+              </tr>
+            </thead>
+            <tbody id="user-rows">
+              <tr>
+                <td colspan="7" class="td text-center text-slate-500">Loading users...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TRACKED ASSETS PANEL -->
+      <div id="panel-assets" style="display:none;">
+        <div class="card p-4 grid md-grid-3 gap-3 mb-4">
+          <input id="a-search" class="input" placeholder="Search asset ID, ticker, or name...">
+          <select id="a-type" class="input">
+            <option value="">All asset types</option>
+            <option value="STOCK">Stocks</option>
+            <option value="CRYPTO">Crypto</option>
+          </select>
+          <select id="a-status" class="input">
+            <option value="">All asset statuses</option>
+            <option value="1">Enabled (Live)</option>
+            <option value="0">Disabled</option>
+          </select>
+        </div>
+
+        <div class="card table-wrap">
+          <table class="min-w-760">
+            <thead>
+              <tr>
+                <th class="th">Asset</th>
+                <th class="th">Type</th>
+                <th class="th text-right">Live Price</th>
+                <th class="th text-right">24h Change</th>
+                <th class="th">Risk</th>
+                <th class="th">Status</th>
+                <th class="th text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="asset-rows">
+              <tr>
+                <td colspan="7" class="td text-center text-slate-500">Loading assets...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- User Detail Slide-Over Drawer -->
+  <div id="user-drawer" class="drawer-backdrop" onclick="if(event.target===this) closeUserDrawer()">
+    <div class="drawer-panel">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 id="ud-username" class="text-xl font-extrabold text-white">@user</h2>
+            <span id="ud-status" class="badge risk-low">ACTIVE</span>
+          </div>
+          <p id="ud-fullname" class="text-xs text-slate-400 mt-0-5">Full Name</p>
+        </div>
+        <button onclick="closeUserDrawer()" class="modal-close">&times;</button>
+      </div>
+
+      <div class="card p-4 space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-slate-400">User ID</span>
+          <span id="ud-id" class="font-semibold text-white">USR0000001</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Email</span>
+          <span id="ud-email" class="text-slate-200">—</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Wallet ID</span>
+          <span id="ud-wallet-id" class="text-slate-200">—</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Role</span>
+          <span id="ud-role" class="text-slate-200">user</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Joined</span>
+          <span id="ud-joined" class="text-slate-200">—</span>
+        </div>
+      </div>
+
+      <div class="card p-4 space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-slate-400">Available Wallet Cash</span>
+          <span id="ud-cash" class="font-bold text-white">0.00 VC</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Portfolio Holdings Value</span>
+          <span id="ud-holdings-val" class="font-bold text-sky">0.00 VC</span>
+        </div>
+        <div class="flex justify-between pt-2" style="border-top:1px solid var(--border-color);">
+          <span class="text-slate-400">Estimated Net Worth</span>
+          <span id="ud-net-worth" class="font-extrabold text-gain">0.00 VC</span>
+        </div>
+      </div>
+
+      <div class="card p-4">
+        <h3 class="text-xs font-semibold text-slate-300 mb-2">Active Holdings</h3>
+        <div id="ud-holdings-list" class="space-y-2 text-xs">
+          <p class="text-slate-500">Loading holdings...</p>
+        </div>
+      </div>
+
+      <div id="ud-lock-wrap"></div>
+    </div>
+  </div>
+
+  <!-- Bulk Add Assets Modal -->
+  <div id="bulk-modal" class="drawer-backdrop" onclick="if(event.target===this) closeBulkModal()">
+    <div class="drawer-panel" style="max-width:34rem;">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-extrabold text-white">Bulk Add Assets</h2>
+          <p class="text-xs text-slate-400 mt-0-5">One asset per line: <code>SYMBOL, Name, TYPE, RISK, PRICE</code></p>
+        </div>
+        <button onclick="closeBulkModal()" class="modal-close">&times;</button>
+      </div>
+
+      <div class="card p-4 space-y-3">
+        <div class="sub-box text-11 text-slate-400">
+          Example format:<br>
+          <code>INTC, Intel Corporation, STOCK, MEDIUM, 24.50</code><br>
+          <code>HDFCBANK.NS, HDFC Bank Ltd, STOCK, LOW, 1720.00</code><br>
+          <code>DOGE, Dogecoin, CRYPTO, HIGH, 0.38</code>
+        </div>
+
+        <textarea id="bulk-input" class="input" rows="8"
+          placeholder="INTC, Intel Corporation, STOCK, MEDIUM, 24.50&#10;AMD, Advanced Micro Devices, STOCK, HIGH, 145.00&#10;TSM, Taiwan Semiconductor, STOCK, MEDIUM, 192.00"></textarea>
+
+        <div id="bulk-result" class="sub-box text-xs" style="display:none;"></div>
+
+        <div class="flex gap-2">
+          <button id="bulk-submit-btn" type="button" class="btn btn-primary flex-1" onclick="submitBulkAssets()">
+            Import Assets
+          </button>
+          <button type="button" class="btn btn-ghost" onclick="closeBulkModal()">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
+
+  <div id="toasts" class="toast-container"></div>
+
   <script>
-    function getUser(){try{return JSON.parse(localStorage.getItem('batua_user')||'null')}catch(e){return null}}
-    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-    function money(n,d){return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})}
-    function dtF(s){return new Date(s).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
-    function toast(m,t){
-  var b=document.getElementById('toasts');
-  if(!b){b=document.createElement('div');b.id='toasts';b.className='toast-container';document.body.appendChild(b)}
-  var e=document.createElement('div');
-  e.className='card toast '+(t==='success'?'toast-success':'toast-error');
-  e.textContent=m;
-  b.appendChild(e);
-  setTimeout(function(){e.remove()},4000);
-}
-    var NAV=[['dashboard.html','Dashboard'],['markets.html','Markets'],['portfolio.html','My Portfolio'],['wallet.html','Wallet'],['transactions.html','Transactions'],['transfers.html','P2P Transfers'],['lending.html','Lending & Borrowing'],['leaderboard.html','Leaderboard'],['profile.html','Profile']];
-function shell(active){
-  var u=getUser();
-  if(!u){location.href='login.html';return null}
-  var links=NAV.slice();
-  if(u.role==='admin')links.push(['admin.html','Admin Panel']);
-  var sb='<aside id="sb" class="sidebar"><div class="sidebar-header"><div class="brand-icon">B</div><span class="brand-text">BATUA<span>-Edu</span></span></div><nav class="sidebar-nav">'+links.map(function(l){return '<a href="'+l[0]+'" class="nav-link'+(l[0]===active?' active':'')+'">'+l[1]+'</a>'}).join('')+'<a href="login.html" onclick="localStorage.removeItem(\'batua_user\')" class="nav-link">Logout</a></nav></aside>';
-  var tb='<header class="topbar"><div class="topbar-left"><button onclick="document.getElementById(\'sb\').classList.toggle(\'open\')" class="menu-btn">&#9776;</button><span class="badge-mock">MOCK PREVIEW</span></div><div class="topbar-right"><div class="user-meta"><p class="user-meta-name">'+esc(u.full_name)+'</p><p class="user-meta-sub">@'+esc(u.username)+' &middot; '+esc(u.role)+'</p></div><div class="avatar">'+esc((u.full_name||'U')[0].toUpperCase())+'</div></div></header>';
-  document.body.insertAdjacentHTML('afterbegin',sb+tb);
-  return u;
-}
-    var u=shell('admin.html');
-    if(u&&u.role!=='admin'){location.href='dashboard.html'}
-    var USERS=[{id:1,username:'admin',full_name:'BATUA Admin',email:'admin@batua.edu',role:'admin',balance:10000},{id:2,username:'aarav',full_name:'Aarav Sharma',email:'aarav@demo.batua.edu',role:'user',balance:6492.6},{id:3,username:'meera',full_name:'Meera Iyer',email:'meera@demo.batua.edu',role:'user',balance:4210.4},{id:4,username:'rohan',full_name:'Rohan Gupta',email:'rohan@demo.batua.edu',role:'user',balance:7120.75},{id:5,username:'sneha',full_name:'Sneha Patil',email:'sneha@demo.batua.edu',role:'user',balance:3260.1}];
-    var ASSETS=[{id:1,symbol:'BTC',name:'Bitcoin',type:'CRYPTO',risk:'HIGH',price:67250,chg:2.34,holders:4,active:true},{id:2,symbol:'ETH',name:'Ethereum',type:'CRYPTO',risk:'HIGH',price:3480,chg:-1.12,holders:6,active:true},{id:3,symbol:'SOL',name:'Solana',type:'CRYPTO',risk:'HIGH',price:172.4,chg:5.61,holders:9,active:true},{id:9,symbol:'TCS',name:'Tata Consultancy Services',type:'STOCK',risk:'LOW',price:4120,chg:1.9,holders:10,active:true},{id:12,symbol:'AAPL',name:'Apple Inc.',type:'STOCK',risk:'MEDIUM',price:228.5,chg:2.75,holders:7,active:true},{id:15,symbol:'TSLA',name:'Tesla Inc.',type:'STOCK',risk:'HIGH',price:242.7,chg:4.2,holders:9,active:true},{id:16,symbol:'NVDA',name:'NVIDIA Corp.',type:'STOCK',risk:'HIGH',price:131.6,chg:-2.4,holders:8,active:true}];
-    var LOGS=[{id:3,action:'ASSET_UPDATED',details:'asset_id=7 risk=HIGH',date:Date.now()-864e5},{id:2,action:'BALANCE_AUDIT',details:'CONSISTENT',date:Date.now()-2*864e5},{id:1,action:'ASSET_LISTED',details:'NVDA @ 131.6',date:Date.now()-4*864e5}];
-    var tab='users',editId=null;
-    var TABS=[['users','Users'],['assets','Assets'],['txns','Transactions'],['lending','Lending'],['logs','System Logs'],['audit','Balance Audit']];
-    document.getElementById('page').innerHTML='<div class="page-header"><h1 class="page-title">Admin Panel</h1><p class="page-subtitle">Role-restricted &middot; every action is written to Admin_Logs.</p></div><div id="tabs" class="flex flex-wrap gap-2 mb-4"></div><div id="body"></div>';
-    function chips(){document.getElementById('tabs').innerHTML=TABS.map(function(t){return '<button class="chip'+(t[0]===tab?' on':'')+'" onclick="setTab(\''+t[0]+'\')">'+t[1]+'</button>'}).join('')}
-    function setTab(t){tab=t;chips();render()}
-    function riskBadge(r){var c=r==='LOW'?'risk-low':r==='MEDIUM'?'risk-medium':'risk-high';return '<span class="badge '+c+'">'+r+'</span>'}
-    function typeBadge(t){var c=t==='CRYPTO'?'type-crypto':'type-stock';return '<span class="badge '+c+'">'+t+'</span>'}
-    function render(){
-      var b=document.getElementById('body');
-      if(tab==='users'){b.innerHTML='<div class="card table-wrap"><table class="min-w-760"><thead><tr><th class="th">ID</th><th class="th">Username</th><th class="th">Name</th><th class="th">Email</th><th class="th">Role</th><th class="th text-right">Balance</th></tr></thead><tbody>'+USERS.map(function(x){return '<tr><td class="td text-slate-500">#'+x.id+'</td><td class="td font-semibold text-white">@'+esc(x.username)+'</td><td class="td">'+esc(x.full_name)+'</td><td class="td text-slate-400">'+esc(x.email)+'</td><td class="td">'+(x.role==='admin'?'<span class="text-sky font-bold text-xs">ADMIN</span>':'user')+'</td><td class="td text-right">'+money(x.balance)+'</td></tr>'}).join('')+'</tbody></table></div>'}
-      if(tab==='assets'){b.innerHTML='<button class="btn btn-primary mb-4" onclick="openModal()">+ List New Asset</button><div class="card table-wrap"><table class="min-w-860"><thead><tr><th class="th">Symbol</th><th class="th">Type</th><th class="th">Risk</th><th class="th text-right">Price</th><th class="th text-right">24h</th><th class="th text-right">Holders</th><th class="th">Status</th><th class="th text-right">Actions</th></tr></thead><tbody>'+ASSETS.map(function(a){return '<tr><td class="td font-semibold text-white">'+esc(a.symbol)+'<p class="text-11 text-slate-500 font-normal">'+esc(a.name)+'</p></td><td class="td">'+typeBadge(a.type)+'</td><td class="td">'+riskBadge(a.risk)+'</td><td class="td text-right">'+money(a.price)+'</td><td class="td text-right">'+a.chg.toFixed(2)+'%</td><td class="td text-right">'+a.holders+'</td><td class="td">'+(a.active?'<span class="text-gain text-xs font-bold">ACTIVE</span>':'<span class="text-loss text-xs font-bold">DELISTED</span>')+'</td><td class="td text-right whitespace-nowrap"><button class="btn btn-ghost btn-sm mr-2" onclick="openModal('+a.id+')">Edit</button><button class="btn btn-loss btn-sm" onclick="delist('+a.id+')">'+(a.active?'Delist':'Relist')+'</button></td></tr>'}).join('')+'</tbody></table></div>'}
-      if(tab==='txns'){b.innerHTML='<div class="card table-wrap"><table class="min-w-860"><thead><tr><th class="th">ID</th><th class="th">User</th><th class="th">Asset</th><th class="th">Type</th><th class="th text-right">Qty</th><th class="th text-right">Amount</th><th class="th">When</th></tr></thead><tbody><tr><td class="td text-slate-500">#12</td><td class="td">@aarav</td><td class="td font-semibold text-white">SOL</td><td class="td"><span class="text-gain font-bold text-xs">BUY</span></td><td class="td text-right">6</td><td class="td text-right">950.40</td><td class="td text-xs text-slate-500">'+dtF(Date.now()-2*864e5)+'</td></tr><tr><td class="td text-slate-500">#11</td><td class="td">@meera</td><td class="td font-semibold text-white">DOGE</td><td class="td"><span class="text-loss font-bold text-xs">SELL</span></td><td class="td text-right">1200</td><td class="td text-right">165.60</td><td class="td text-xs text-slate-500">'+dtF(Date.now()-3*864e5)+'</td></tr><tr><td class="td text-slate-500">#9</td><td class="td">@aarav</td><td class="td font-semibold text-white">TCS</td><td class="td"><span class="text-gain font-bold text-xs">BUY</span></td><td class="td text-right">0.5</td><td class="td text-right">2,005.00</td><td class="td text-xs text-slate-500">'+dtF(Date.now()-7*864e5)+'</td></tr></tbody></table></div>'}
-      if(tab==='lending'){b.innerHTML='<div class="grid sm-grid-3 gap-4"><div class="card p-5"><p class="stat-label">Pool Liquidity</p><p class="stat-value">24,300.00 TUA</p></div><div class="card p-5"><p class="stat-label">Total Lent</p><p class="stat-value">1,200.00 TUA</p></div><div class="card p-5"><p class="stat-label">Total Borrowed</p><p class="stat-value">500.00 TUA</p></div></div><div class="grid lg-grid-2 gap-4 mt-4"><div class="card p-5"><h3 class="font-semibold mb-3">Lending Records</h3><div class="flex justify-between text-sm"><span>@aarav &middot; 200.00 TUA @ 6%</span><span class="text-amber text-xs font-bold">ACTIVE</span></div></div><div class="card p-5"><h3 class="font-semibold mb-3">Loans</h3><div class="flex justify-between text-sm"><span>@aarav &middot; 300.00 TUA @ 12%</span><span class="text-amber text-xs font-bold">OPEN</span></div></div></div>'}
-      if(tab==='logs'){b.innerHTML='<div class="card table-wrap"><table class="min-w-640"><thead><tr><th class="th">ID</th><th class="th">Admin</th><th class="th">Action</th><th class="th">Details</th><th class="th">When</th></tr></thead><tbody>'+LOGS.map(function(l){return '<tr><td class="td text-slate-500">#'+l.id+'</td><td class="td">@admin</td><td class="td font-semibold text-white text-xs">'+l.action+'</td><td class="td text-slate-400">'+esc(l.details)+'</td><td class="td text-xs text-slate-500">'+dtF(l.date)+'</td></tr>'}).join('')+'</tbody></table></div>'}
-      if(tab==='audit'){b.innerHTML='<div class="card card-gain-border p-5 flex items-center justify-between"><div><p class="text-sm font-bold text-white">Wallet Integrity Check</p><p class="text-xs text-slate-500 mt-1">&Sigma; Wallets.balance vs &Sigma; Wallet_History.amount</p></div><div class="text-right"><p class="text-xl font-extrabold text-gain">&check; CONSISTENT</p><p class="text-xs text-slate-500">wallets 41,083.85 &middot; ledger 41,083.85</p></div></div><div class="grid sm-grid-2 xl-grid-4 gap-4 mt-4"><div class="card p-5"><p class="stat-label">Holdings Value</p><p class="text-xl font-bold text-white mt-1-5">19,430.65 TUA</p></div><div class="card p-5"><p class="stat-label">Open Loans</p><p class="text-xl font-bold text-white mt-1-5">300.00 TUA</p></div><div class="card p-5"><p class="stat-label">Active Lends</p><p class="text-xl font-bold text-white mt-1-5">200.00 TUA</p></div><div class="card p-5"><p class="stat-label">Pool Liquidity</p><p class="text-xl font-bold text-white mt-1-5">24,300.00 TUA</p></div></div><p class="text-xs text-slate-500 mt-4">5 users &middot; 128 trades &middot; audit logged to Admin_Logs.</p><button class="btn btn-ghost mt-3" onclick="toast(\'Audit re-run: CONSISTENT\',\'success\')">Re-run audit</button>'}
+    var user;
+    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { user = null; }
+    if (!user) { window.location.replace('auth.html?mode=login'); }
+    if (user && user.role !== 'admin') { window.location.replace('dashboard.html'); }
+
+    document.getElementById('logout').onclick = function () {
+      localStorage.removeItem('batua_user');
+      window.location.href = 'index.html';
+    };
+    if (user) {
+      document.getElementById('user-name').textContent = user.full_name || user.username;
+      document.getElementById('user-role').textContent = '@' + user.username + ' · ' + user.role;
+      document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'A')[0].toUpperCase();
     }
-    function openModal(id){editId=id||null;var a=id?ASSETS.find(function(x){return x.id===id}):null;document.getElementById('mtitle').textContent=a?'Edit '+a.symbol:'List New Asset';document.getElementById('msym').value=a?a.symbol:'';document.getElementById('msym').disabled=!!a;document.getElementById('mname').value=a?a.name:'';document.getElementById('mprice').value=a?a.price:'';document.getElementById('mtype').value=a?a.type:'STOCK';document.getElementById('mrisk').value=a?a.risk:'MEDIUM';document.getElementById('modal').classList.add('open')}
-    function closeModal(){document.getElementById('modal').classList.remove('open')}
-    function saveAsset(){var sym=document.getElementById('msym').value.trim().toUpperCase();var name=document.getElementById('mname').value.trim();var price=Number(document.getElementById('mprice').value);var type=document.getElementById('mtype').value;var risk=document.getElementById('mrisk').value;if(!sym||!name||!(price>0))return toast('Fill symbol, name and a valid price.');if(editId){var a=ASSETS.find(function(x){return x.id===editId});a.name=name;a.price=price;a.type=type;a.risk=risk;LOGS.unshift({id:Date.now(),action:'ASSET_UPDATED',details:sym+' risk='+risk,date:Date.now()});toast('Asset updated.','success')}else{ASSETS.push({id:Date.now(),symbol:sym,name:name,type:type,risk:risk,price:price,chg:0,holders:0,active:true});LOGS.unshift({id:Date.now(),action:'ASSET_LISTED',details:sym+' @ '+price,date:Date.now()});toast(sym+' listed successfully.','success')}closeModal();render()}
-    function delist(id){var a=ASSETS.find(function(x){return x.id===id});a.active=!a.active;LOGS.unshift({id:Date.now(),action:a.active?'ASSET_RELISTED':'ASSET_DELISTED',details:a.symbol,date:Date.now()});toast(a.symbol+(a.active?' relisted.':' delisted.'),'success');render()}
-    chips();render();
+
+    var allUsers = [];
+    var allAssets = [];
+
+    function money(n, d) {
+      d = d === undefined ? 2 : d;
+      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function pct(n) { return (Number(n || 0) >= 0 ? '+' : '') + Number(n || 0).toFixed(2) + '%'; }
+    function plCls(n) { return Number(n || 0) >= 0 ? 'text-gain' : 'text-loss'; }
+    function fmtDate(ts) {
+      if (!ts) return '—';
+      return new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function adminHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'x-admin-id': String(user.user_id)
+      };
+    }
+
+    function showToast(msg, variant, durationMs) {
+      var type = variant || 'info';
+      var duration = durationMs || 4000;
+      var titleMap = { buy: 'Updated', sell: 'Restricted', info: 'Admin Notice' };
+
+      var box = document.getElementById('toasts');
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.style.setProperty('--toast-duration', duration + 'ms');
+
+      el.innerHTML =
+        '<div class="toast-body">' +
+        '<p class="toast-title">' + (titleMap[type] || 'Notice') + '</p>' +
+        '<p class="text-slate-200">' + msg + '</p>' +
+        '</div>' +
+        '<button type="button" class="toast-close" aria-label="Close">&times;</button>' +
+        '<div class="toast-progress"></div>';
+
+      var closed = false;
+      function dismiss() {
+        if (closed) return;
+        closed = true;
+        el.classList.add('closing');
+        setTimeout(function () { el.remove(); }, 220);
+      }
+
+      el.querySelector('.toast-close').onclick = dismiss;
+      box.appendChild(el);
+      setTimeout(dismiss, duration);
+    }
+
+    function switchTab(tab) {
+      var isUsers = tab === 'users';
+      document.getElementById('panel-users').style.display = isUsers ? 'block' : 'none';
+      document.getElementById('panel-assets').style.display = isUsers ? 'none' : 'block';
+      document.getElementById('tab-users').className = isUsers ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+      document.getElementById('tab-assets').className = !isUsers ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+    }
+
+    function updateKPIs() {
+      document.getElementById('stat-users').textContent = allUsers.length;
+      document.getElementById('stat-locked').textContent = allUsers.filter(function (u) { return u.status === 'LOCKED'; }).length;
+      document.getElementById('stat-assets-active').textContent = allAssets.filter(function (a) { return Number(a.is_active) === 1; }).length;
+      document.getElementById('stat-assets-disabled').textContent = allAssets.filter(function (a) { return Number(a.is_active) === 0; }).length;
+    }
+
+    async function loadUsers() {
+      try {
+        var res = await fetch('/api/admin/users', { headers: adminHeaders() });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load users');
+        allUsers = data;
+        updateKPIs();
+        renderUsersTable();
+      } catch (err) {
+        document.getElementById('user-rows').innerHTML =
+          '<tr><td colspan="7" class="td text-center text-loss">' + err.message + '</td></tr>';
+      }
+    }
+
+    async function loadAssets() {
+      try {
+        var res = await fetch('/api/admin/assets', { headers: adminHeaders() });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load assets');
+        allAssets = data;
+        updateKPIs();
+        renderAssetsTable();
+      } catch (err) {
+        document.getElementById('asset-rows').innerHTML =
+          '<tr><td colspan="7" class="td text-center text-loss">' + err.message + '</td></tr>';
+      }
+    }
+
+    async function loadAllAdminData() {
+      await Promise.all([loadUsers(), loadAssets()]);
+    }
+
+    function renderUsersTable() {
+      var q = document.getElementById('u-search').value.trim().toLowerCase();
+      var roleFilter = document.getElementById('u-role').value;
+      var statusFilter = document.getElementById('u-status').value;
+
+      var list = allUsers.filter(function (u) {
+        return (!q ||
+          String(u.user_id).toLowerCase().includes(q) ||
+          String(u.username).toLowerCase().includes(q) ||
+          String(u.full_name || '').toLowerCase().includes(q) ||
+          String(u.email || '').toLowerCase().includes(q)) &&
+          (!roleFilter || u.role === roleFilter) &&
+          (!statusFilter || u.status === statusFilter);
+      });
+
+      var tbody = document.getElementById('user-rows');
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="td text-center text-slate-500">No users match the selected filters.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(function (u) {
+        var isLocked = u.status === 'LOCKED';
+        var isSelf = String(u.user_id) === String(user.user_id);
+        var nextStatus = isLocked ? 'ACTIVE' : 'LOCKED';
+
+        return '<tr class="clickable-row" onclick="openUserDrawer(\'' + u.user_id + '\')">' +
+          '<td class="td">' +
+          '<p class="font-semibold text-white">' + (u.full_name || u.username) + '</p>' +
+          '<p class="text-11 text-slate-500">@' + u.username + ' &middot; ' + u.user_id + '</p>' +
+          '</td>' +
+          '<td class="td">' +
+          '<p class="text-xs text-slate-200">' + (u.email || '—') + '</p>' +
+          '<p class="text-11 text-slate-500">' + (u.wallet_id || 'No wallet') + '</p>' +
+          '</td>' +
+          '<td class="td text-right font-medium text-white">' + money(u.wallet_balance) + ' VC</td>' +
+          '<td class="td text-right">' +
+          '<p class="font-medium text-slate-200">' + money(u.holdings_value) + ' VC</p>' +
+          '<p class="text-11 text-slate-500">' + (u.holdings_count || 0) + ' asset(s)</p>' +
+          '</td>' +
+          '<td class="td"><span class="badge ' + (u.role === 'admin' ? 'badge-sky' : 'type-stock') + '">' + u.role.toUpperCase() + '</span></td>' +
+          '<td class="td"><span class="badge ' + (isLocked ? 'risk-high' : 'risk-low') + '">' + u.status + '</span></td>' +
+          '<td class="td text-right whitespace-nowrap" onclick="event.stopPropagation()">' +
+          (isSelf
+            ? '<span class="text-11 text-slate-500">Current Session</span>'
+            : '<button type="button" class="btn ' + (isLocked ? 'btn-gain' : 'btn-loss') + ' btn-sm" onclick="toggleUserLock(\'' + u.user_id + '\', \'' + nextStatus + '\')">' +
+            (isLocked ? 'Unlock' : 'Lock Account') +
+            '</button>') +
+          '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    async function toggleUserLock(targetUserId, newStatus) {
+      try {
+        var res = await fetch('/api/admin/users/' + encodeURIComponent(targetUserId) + '/status', {
+          method: 'PATCH',
+          headers: adminHeaders(),
+          body: JSON.stringify({ status: newStatus })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update status');
+
+        showToast(data.message, newStatus === 'LOCKED' ? 'sell' : 'buy');
+        await loadUsers();
+        if (document.getElementById('user-drawer').classList.contains('open')) {
+          openUserDrawer(targetUserId);
+        }
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    async function openUserDrawer(targetUserId) {
+      var u = allUsers.find(function (x) { return String(x.user_id) === String(targetUserId); });
+      if (!u) return;
+
+      var isLocked = u.status === 'LOCKED';
+      var isSelf = String(u.user_id) === String(user.user_id);
+
+      document.getElementById('ud-username').textContent = '@' + u.username;
+      document.getElementById('ud-fullname').textContent = u.full_name || '—';
+      var stEl = document.getElementById('ud-status');
+      stEl.textContent = u.status;
+      stEl.className = 'badge ' + (isLocked ? 'risk-high' : 'risk-low');
+
+      document.getElementById('ud-id').textContent = u.user_id;
+      document.getElementById('ud-email').textContent = u.email || '—';
+      document.getElementById('ud-wallet-id').textContent = u.wallet_id || '—';
+      document.getElementById('ud-role').textContent = u.role.toUpperCase();
+      document.getElementById('ud-joined').textContent = fmtDate(u.created_at);
+
+      var cash = Number(u.wallet_balance || 0);
+      var hVal = Number(u.holdings_value || 0);
+      document.getElementById('ud-cash').textContent = money(cash) + ' VC';
+      document.getElementById('ud-holdings-val').textContent = money(hVal) + ' VC';
+      document.getElementById('ud-net-worth').textContent = money(cash + hVal) + ' VC';
+
+      var lockWrap = document.getElementById('ud-lock-wrap');
+      lockWrap.innerHTML = isSelf
+        ? '<p class="text-xs text-center text-slate-500">Cannot lock your active admin account.</p>'
+        : '<button type="button" class="btn ' + (isLocked ? 'btn-gain' : 'btn-loss') + ' btn-full" onclick="toggleUserLock(\'' + u.user_id + '\', \'' + (isLocked ? 'ACTIVE' : 'LOCKED') + '\')">' +
+        (isLocked ? 'Unlock User Account' : 'Lock User Account') +
+        '</button>';
+
+      document.getElementById('user-drawer').classList.add('open');
+
+      var hList = document.getElementById('ud-holdings-list');
+      hList.innerHTML = '<p class="text-slate-500">Loading holdings...</p>';
+      try {
+        var res = await fetch('/api/portfolio/' + encodeURIComponent(u.user_id));
+        var pData = await res.json();
+        var holdings = pData.holdings || [];
+        if (!holdings.length) {
+          hList.innerHTML = '<p class="text-slate-500">No active holdings.</p>';
+        } else {
+          hList.innerHTML = holdings.map(function (h) {
+            return '<div class="flex justify-between py-1" style="border-bottom:1px solid var(--border-color);">' +
+              '<span class="font-semibold text-white">' + h.symbol + ' <span class="text-slate-500 font-normal">(' + Number(h.qty).toFixed(4) + ')</span></span>' +
+              '<span class="text-slate-200">' + money(h.current_value) + ' VC</span>' +
+              '</div>';
+          }).join('');
+        }
+      } catch (_) {
+        hList.innerHTML = '<p class="text-loss">Unable to fetch holdings.</p>';
+      }
+    }
+
+    function closeUserDrawer() {
+      document.getElementById('user-drawer').classList.remove('open');
+    }
+
+    function renderAssetsTable() {
+      var q = document.getElementById('a-search').value.trim().toLowerCase();
+      var typeFilter = document.getElementById('a-type').value;
+      var statusFilter = document.getElementById('a-status').value;
+
+      var list = allAssets.filter(function (a) {
+        return (!q ||
+          String(a.asset_id).toLowerCase().includes(q) ||
+          String(a.symbol).toLowerCase().includes(q) ||
+          String(a.name).toLowerCase().includes(q)) &&
+          (!typeFilter || a.asset_type === typeFilter) &&
+          (statusFilter === '' || String(a.is_active) === statusFilter);
+      });
+
+      var tbody = document.getElementById('asset-rows');
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="td text-center text-slate-500">No tracked assets match your filter.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(function (a) {
+        var active = Number(a.is_active) === 1;
+        var riskClass = a.risk === 'LOW' ? 'risk-low' : a.risk === 'MEDIUM' ? 'risk-medium' : 'risk-high';
+        var typeClass = a.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock';
+
+        return '<tr>' +
+          '<td class="td">' +
+          '<p class="font-semibold text-white">' + a.symbol + ' <span class="text-11 text-slate-500 font-normal">&middot; ' + a.asset_id + '</span></p>' +
+          '<p class="text-11 text-slate-500">' + a.name + '</p>' +
+          '</td>' +
+          '<td class="td"><span class="badge ' + typeClass + '">' + a.asset_type + '</span></td>' +
+          '<td class="td text-right font-medium text-white">' + money(a.current_price) + ' VC</td>' +
+          '<td class="td text-right font-semibold ' + plCls(a.price_change) + '">' + pct(a.price_change) + '</td>' +
+          '<td class="td"><span class="badge ' + riskClass + '">' + a.risk + '</span></td>' +
+          '<td class="td"><span class="badge ' + (active ? 'risk-low' : 'risk-high') + '">' + (active ? 'ENABLED' : 'DISABLED') + '</span></td>' +
+          '<td class="td text-right whitespace-nowrap">' +
+          '<button type="button" class="btn ' + (active ? 'btn-loss' : 'btn-gain') + ' btn-sm" onclick="toggleAssetStatus(\'' + a.asset_id + '\', ' + (active ? 0 : 1) + ')">' +
+          (active ? 'Disable' : 'Enable') +
+          '</button>' +
+          '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    async function toggleAssetStatus(assetId, nextState) {
+      try {
+        var res = await fetch('/api/admin/assets/' + encodeURIComponent(assetId) + '/status', {
+          method: 'PATCH',
+          headers: adminHeaders(),
+          body: JSON.stringify({ is_active: nextState })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update asset');
+
+        showToast(data.message, nextState === 1 ? 'buy' : 'sell');
+        await loadAssets();
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    function openBulkModal() {
+      document.getElementById('bulk-result').style.display = 'none';
+      document.getElementById('bulk-modal').classList.add('open');
+    }
+
+    function closeBulkModal() {
+      document.getElementById('bulk-modal').classList.remove('open');
+    }
+
+    async function submitBulkAssets() {
+      var rawText = document.getElementById('bulk-input').value.trim();
+      var resBox = document.getElementById('bulk-result');
+      var btn = document.getElementById('bulk-submit-btn');
+
+      if (!rawText) {
+        showToast('Enter at least one line of asset data.', 'info');
+        return;
+      }
+
+      var lines = rawText.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      var parsed = [];
+
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split(',').map(function (p) { return p.trim(); });
+        if (!parts[0]) continue;
+        parsed.push({
+          symbol: parts[0].toUpperCase(),
+          name: parts[1] || parts[0].toUpperCase(),
+          asset_type: (parts[2] || 'STOCK').toUpperCase(),
+          risk: (parts[3] || 'MEDIUM').toUpperCase(),
+          current_price: Number(parts[4] || 0)
+        });
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Importing...';
+      resBox.style.display = 'none';
+
+      try {
+        var res = await fetch('/api/admin/assets/bulk', {
+          method: 'POST',
+          headers: adminHeaders(),
+          body: JSON.stringify({ assets: parsed })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Bulk import failed');
+
+        var skippedMsg = data.results.skipped.length
+          ? ' Skipped: ' + data.results.skipped.map(function (s) { return s.symbol + ' (' + s.reason + ')'; }).join(', ')
+          : '';
+
+        resBox.textContent = data.message + skippedMsg;
+        resBox.className = 'sub-box text-xs text-gain';
+        resBox.style.display = 'block';
+
+        document.getElementById('bulk-input').value = '';
+        showToast(data.message, 'buy');
+        await loadAssets();
+        switchTab('assets');
+      } catch (err) {
+        resBox.textContent = err.message;
+        resBox.className = 'sub-box text-xs text-loss';
+        resBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Import Assets';
+      }
+    }
+
+    document.getElementById('u-search').addEventListener('input', renderUsersTable);
+    document.getElementById('u-role').addEventListener('change', renderUsersTable);
+    document.getElementById('u-status').addEventListener('change', renderUsersTable);
+
+    document.getElementById('a-search').addEventListener('input', renderAssetsTable);
+    document.getElementById('a-type').addEventListener('change', renderAssetsTable);
+    document.getElementById('a-status').addEventListener('change', renderAssetsTable);
+
+    loadAllAdminData();
   </script>
 </body>
+
 </html>
