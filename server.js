@@ -91,7 +91,7 @@ function broadcastP2PEvent(room) {
   for (const client of sseClients) {
     try {
       client.write(payload);
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
@@ -582,7 +582,7 @@ app.post('/api/assets/lookup', async (req, res) => {
         const profRes = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(rawSymbol)}&token=${apiKey}`);
         const prof = await profRes.json();
         if (prof && prof.name) assetName = prof.name;
-      } catch (_) {}
+      } catch (_) { }
     } else {
       assetName = `${rawSymbol} / USDT`;
     }
@@ -914,6 +914,12 @@ app.get('/api/dashboard/:userId', async (req, res) => {
        WHERE loan_status IN ('APPROVED', 'ACTIVE')
        GROUP BY borrower_id`
     );
+    const [activeLends] = await pool.query(
+      `SELECT lender_id, COALESCE(SUM(principal_amount), 0) AS lent
+       FROM lending
+       WHERE lending_status IN ('OPEN', 'PARTIALLY_FUNDED', 'FULLY_FUNDED')
+       GROUP BY lender_id`
+    );
 
     const holdingsMap = {};
     for (const row of allHoldings) {
@@ -927,17 +933,22 @@ app.get('/api/dashboard/:userId', async (req, res) => {
       debtMap[row.borrower_id] = Number(row.debt || 0);
     }
 
+    const lentMap = {};
+    for (const row of activeLends) {
+      lentMap[row.lender_id] = Number(row.lent || 0);
+    }
+
     const standings = allUsers
       .map((u) => ({
         user_id: u.user_id,
-        net_worth: Number(u.cash) + (holdingsMap[u.user_id] || 0) - (debtMap[u.user_id] || 0)
+        net_worth: Number(u.cash) + (holdingsMap[u.user_id] || 0) + (lentMap[u.user_id] || 0) - (debtMap[u.user_id] || 0)
       }))
       .sort((a, b) => b.net_worth - a.net_worth);
 
     const totalTraders = standings.length || 1;
     const myIdx = standings.findIndex((s) => s.user_id === userId);
     const rank = myIdx >= 0 ? myIdx + 1 : totalTraders;
-    const netWorth = myIdx >= 0 ? standings[myIdx].net_worth : (walletBalance + portfolioValue);
+    const netWorth = myIdx >= 0 ? standings[myIdx].net_worth : (walletBalance + portfolioValue + (lentMap[userId] || 0));
 
     const [lbRows] = await pool.query(
       `SELECT snapshot_date, balance, gain_loss
@@ -1413,7 +1424,7 @@ app.post('/api/p2p/invite', blockIfLocked, async (req, res) => {
     const roomId = ++p2pRoomSeq;
     const room = {
       room_id: roomId,
-      status: 'INVITED', // INVITED -> A BUILDING -> B REVIEWING -> B BUILDING -> A REVIEWING -> SETTLED | CLOSED
+      status: 'INVITED', // INVITED -> A_BUILDING -> B_REVIEWING -> B_BUILDING -> A_REVIEWING -> SETTLED | CLOSED
       maker: { user_id: maker.user_id, username: maker.username },
       taker: { user_id: taker.user_id, username: taker.username },
       frozen_prices: {},
@@ -1458,7 +1469,7 @@ app.post('/api/p2p/:roomId/respond-invite', blockIfLocked, async (req, res) => {
     }
 
     room.frozen_prices = frozen;
-    room.status = 'A BUILDING';
+    room.status = 'A_BUILDING';
     room.last_note = `@${room.taker.username} accepted! Prices locked — waiting on @${room.maker.username}'s single-asset offer.`;
     broadcastP2PEvent(room);
     res.json({ message: 'Invite accepted! Market prices are now locked.', room });
@@ -1477,8 +1488,8 @@ app.post('/api/p2p/:roomId/submit-offer', blockIfLocked, async (req, res) => {
   const room = p2pRooms.get(roomId);
   if (!room) return res.status(404).json({ error: 'Trade room not found.' });
 
-  const isMaker = room.maker.user_id === userId && room.status === 'A BUILDING';
-  const isTaker = room.taker.user_id === userId && room.status === 'B BUILDING';
+  const isMaker = room.maker.user_id === userId && room.status === 'A_BUILDING';
+  const isTaker = room.taker.user_id === userId && room.status === 'B_BUILDING';
   if (!isMaker && !isTaker) return res.status(403).json({ error: 'It is not your turn to submit an offer.' });
 
   if (!assetId || !Number.isFinite(qty) || qty <= 0) {
@@ -1528,11 +1539,11 @@ app.post('/api/p2p/:roomId/submit-offer', blockIfLocked, async (req, res) => {
 
     if (isMaker) {
       room.offer_a = offerObj;
-      room.status = 'B REVIEWING';
+      room.status = 'B_REVIEWING';
       room.last_note = `@${room.maker.username} offered ${cleanQty.toFixed(6)} ${symbol} (${totalVc.toFixed(2)} VC). Waiting on @${room.taker.username}.`;
     } else {
       room.offer_b = offerObj;
-      room.status = 'A REVIEWING';
+      room.status = 'A_REVIEWING';
       room.last_note = `@${room.taker.username} countered with ${cleanQty.toFixed(6)} ${symbol} (${totalVc.toFixed(2)} VC). Waiting on @${room.maker.username}.`;
     }
 
@@ -1568,13 +1579,13 @@ app.post('/api/p2p/:roomId/review', blockIfLocked, async (req, res) => {
   }
 
   if (decision === 'REJECT') {
-    if (isTaker && room.status === 'B REVIEWING') {
+    if (isTaker && room.status === 'B_REVIEWING') {
       room.offer_a = null;
-      room.status = 'A BUILDING';
+      room.status = 'A_BUILDING';
       room.last_note = `@${actor} rejected the offer — @${room.maker.username} may revise or leave.`;
-    } else if (isMaker && room.status === 'A REVIEWING') {
+    } else if (isMaker && room.status === 'A_REVIEWING') {
       room.offer_b = null;
-      room.status = 'B BUILDING';
+      room.status = 'B_BUILDING';
       room.last_note = `@${actor} rejected the counter-offer — @${room.taker.username} may revise or leave.`;
     } else {
       return res.status(400).json({ error: 'Cannot reject at this stage.' });
@@ -1586,15 +1597,15 @@ app.post('/api/p2p/:roomId/review', blockIfLocked, async (req, res) => {
   if (decision !== 'ACCEPT') return res.status(400).json({ error: 'Invalid decision.' });
 
   // Step 4: Taker accepts Maker's offer -> Taker builds single-asset counter-offer
-  if (isTaker && room.status === 'B REVIEWING') {
-    room.status = 'B BUILDING';
+  if (isTaker && room.status === 'B_REVIEWING') {
+    room.status = 'B_BUILDING';
     room.last_note = `@${actor} accepted! Now selecting 1 asset worth ${room.offer_a.total_vc.toFixed(2)} VC.`;
     broadcastP2PEvent(room);
     return res.json({ message: 'Offer accepted! Now select your single asset to match.', room });
   }
 
   // Step 6 & 7: Maker accepts Taker's counter-offer -> ATOMIC 1-ROW SWAP SETTLEMENT (ordered TRD0000001)
-  if (!(isMaker && room.status === 'A REVIEWING')) {
+  if (!(isMaker && room.status === 'A_REVIEWING')) {
     return res.status(400).json({ error: 'Not ready for final settlement.' });
   }
 
@@ -1786,7 +1797,24 @@ app.get('/api/portfolio/:userId', async (req, res) => {
         value: Number(r.balance)
       }));
     } else {
-      const netWorth = Number(walletRow?.balance || 0) + totalValue;
+      const [[lentRow]] = await pool.query(
+        `SELECT COALESCE(SUM(principal_amount), 0) AS lent
+         FROM lending
+         WHERE lender_id = ? AND lending_status IN ('OPEN', 'PARTIALLY_FUNDED', 'FULLY_FUNDED')`,
+        [userId]
+      );
+      const [[debtRow]] = await pool.query(
+        `SELECT COALESCE(SUM(total_repayment - amount_paid), 0) AS debt
+         FROM loans
+         WHERE borrower_id = ? AND loan_status IN ('APPROVED', 'ACTIVE')`,
+        [userId]
+      );
+      const netWorth =
+        Number(walletRow?.balance || 0) +
+        totalValue +
+        Number(lentRow?.lent || 0) -
+        Number(debtRow?.debt || 0);
+
       for (let i = 6; i >= 0; i--) {
         const d = new Date(Date.now() - i * 86400000);
         series.push({
@@ -2639,6 +2667,27 @@ app.get('/api/leaderboard', async (req, res) => {
       ORDER BY net_worth DESC
     `);
 
+    const [liveHoldings] = await pool.query(`
+      SELECT p.user_id, p.total_fraction_owned, a.symbol, a.current_price
+      FROM portfolio p
+      JOIN assets a ON p.asset_id = a.asset_id
+      WHERE p.total_fraction_owned > 0
+    `);
+
+    const livePortMap = {};
+    for (const h of liveHoldings) {
+      const live = liveState[h.symbol];
+      const px = live && live.price > 0 ? live.price : Number(h.current_price);
+      livePortMap[h.user_id] = (livePortMap[h.user_id] || 0) + Number(h.total_fraction_owned) * px;
+    }
+
+    for (const r of rows) {
+      const livePv = livePortMap[r.user_id] || 0;
+      r.portfolio_value = Number(livePv.toFixed(2));
+      r.net_worth = Number((Number(r.wallet_balance) + livePv + Number(r.active_lent) - Number(r.active_debt)).toFixed(2));
+    }
+    rows.sort((a, b) => b.net_worth - a.net_worth);
+
     res.json({ leaderboard: rows });
   } catch (err) {
     console.error('Leaderboard error:', err);
@@ -2784,7 +2833,7 @@ app.post('/api/admin/assets/bulk', requireAdmin, async (req, res) => {
     }
 
     if (results.added.length && process.env.FINNHUB_API_KEY) {
-      syncSnapshotsToDb(process.env.FINNHUB_API_KEY).catch(() => {});
+      await syncSnapshotsToDb(process.env.FINNHUB_API_KEY);
     }
 
     res.json({
