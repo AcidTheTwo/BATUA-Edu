@@ -2,897 +2,576 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asset Terminal &middot; BATUA-Edu</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asset Terminal &middot; BATUA-Edu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@1..144,400..700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <aside id="sb" class="sidebar">
-        <div class="sidebar-header">
-            <div class="brand-icon">B</div>
-            <span class="brand-text">BATUA<span>-Edu</span></span>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="dashboard.html" class="nav-link">Dashboard</a>
-            <a href="markets.html" class="nav-link active">Markets</a>
-            <a href="portfolio.html" class="nav-link">My Portfolio</a>
-            <a href="wallets.html" class="nav-link">Wallet</a>
-            <a href="leaderboard.html" class="nav-link">Leaderboard</a>
-            <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
-        </nav>
-        <div class="sidebar-footer">&copy PRIMARY K's</div>
-    </aside>
+  <aside id="sb" class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">B</div>
+      <span class="brand-text">BATUA<span>-Edu</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="markets.html" class="nav-link active">Markets</a>
+      <a href="portfolio.html" class="nav-link">My Portfolio</a>
+      <a href="wallets.html" class="nav-link">Wallet</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+      <a id="admin-link" href="admin.html" class="nav-link" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="sidebar-footer">&copy; PRIMARY K's</div>
+  </aside>
 
-    <header class="topbar">
-        <div class="topbar-left">
-            <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
-            <a href="markets.html" class="text-xs text-slate-400">&larr; Back to Markets</a>
+  <header class="topbar">
+    <div class="topbar-left">
+      <button onclick="document.getElementById('sb').classList.toggle('open')" class="menu-btn">&#9776;</button>
+      <a href="markets.html" class="text-xs text-slate-400">&larr; Back to Markets</a>
+    </div>
+    <div class="topbar-right">
+      <div class="user-menu" tabindex="0">
+        <div class="user-meta">
+          <p class="user-meta-name" id="user-name">Loading...</p>
+          <p class="user-meta-sub" id="user-role">user</p>
         </div>
-        <div class="topbar-right">
-            <div class="user-menu" tabindex="0">
-                <div class="user-meta">
-                    <p class="user-meta-name" id="user-name">Loading...</p>
-                    <p class="user-meta-sub" id="user-role">user</p>
-                </div>
-                <div class="avatar" id="user-avatar">U</div>
-                <div class="user-dropdown">
-                    <div class="user-dropdown-panel">
-                        <a href="profile.html" class="dropdown-item">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                            </svg>
-                            Profile
-                        </a>
-                        <button id="logout" type="button" class="dropdown-item dropdown-item-danger">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                                <polyline points="16 17 21 12 16 7" />
-                                <line x1="21" y1="12" x2="9" y2="12" />
-                            </svg>
-                            Logout
-                        </button>
-                    </div>
-                </div>
+        <div class="avatar" id="user-avatar">U</div>
+        <div class="user-dropdown">
+          <div class="user-dropdown-panel">
+            <a href="profile.html" class="dropdown-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Profile
+            </a>
+            <button id="logout" type="button" class="dropdown-item dropdown-item-danger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="container">
+      <!-- Top Asset Selector & Quick Jump -->
+      <div class="page-header-row">
+        <div>
+          <h1 class="page-title">Asset Details</h1>
+        </div>
+        <div style="min-width:15rem;">
+          <select id="asset-switcher" class="input" onchange="switchAsset(this.value)">
+            <option value="">Loading assets...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid lg-grid-3 gap-4">
+        <!-- Left 2 Columns: Price Chart + Fundamentals -->
+        <div class="lg-col-span-2 space-y-4">
+          <div class="card p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex flex-wrap items-center gap-3">
+                <h2 id="a-name" class="text-xl font-bold text-white">Loading...</h2>
+                <span id="a-type" class="badge type-crypto">CRYPTO</span>
+                <span id="a-risk" class="badge risk-high">HIGH</span>
+              </div>
+              <span id="a-symbol-tag" class="text-xs font-semibold text-slate-500">—</span>
             </div>
-        </div>
-    </header>
 
-    <main class="app-main">
-        <div class="container">
-            <!-- Top Asset Selector & Quick Jump -->
-            <div class="page-header-row">
-                <div>
-                    <h1 class="page-title">Asset Terminal &amp; P2P Trade Room</h1>
-                    <p class="page-subtitle">Inspect live price history, execute spot orders, or negotiate multi-asset
-                        two-way swaps.</p>
-                </div>
-                <div style="min-width:15rem;">
-                    <select id="asset-switcher" class="input" onchange="switchAsset(this.value)">
-                        <option value="">Loading assets...</option>
-                    </select>
-                </div>
+            <div class="flex items-end gap-4 mt-3">
+              <p id="a-price" class="text-3xl font-extrabold text-white">0.00 <span
+                  class="text-sm text-slate-500 font-medium">VC</span></p>
+              <p id="a-chg" class="font-bold text-gain">+0.00% <span
+                  class="text-xs font-normal text-slate-500">24h</span></p>
             </div>
 
-            <div class="grid lg-grid-3 gap-4">
-                <!-- Left 2 Columns: Price Chart + Fundamentals + P2P History -->
-                <div class="lg-col-span-2 space-y-4">
-                    <div class="card p-5">
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex flex-wrap items-center gap-3">
-                                <h2 id="a-name" class="text-xl font-bold text-white">Loading...</h2>
-                                <span id="a-type" class="badge type-crypto">CRYPTO</span>
-                                <span id="a-risk" class="badge risk-high">HIGH</span>
-                            </div>
-                            <span id="a-symbol-tag" class="text-xs font-semibold text-slate-500">—</span>
-                        </div>
-
-                        <div class="flex items-end gap-4 mt-3">
-                            <p id="a-price" class="text-3xl font-extrabold text-white">0.00 <span
-                                    class="text-sm text-slate-500 font-medium">VC</span></p>
-                            <p id="a-chg" class="font-bold text-gain">+0.00% <span
-                                    class="text-xs font-normal text-slate-500">24h</span></p>
-                        </div>
-
-                        <div class="flex items-center justify-between mt-4 mb-3">
-                            <div class="flex gap-2" id="range-tabs">
-                                <button class="range-btn active" data-range="1D" onclick="setRange('1D')">1D</button>
-                                <button class="range-btn" data-range="1W" onclick="setRange('1W')">1W</button>
-                                <button class="range-btn" data-range="1M" onclick="setRange('1M')">1M</button>
-                                <button class="range-btn" data-range="1Y" onclick="setRange('1Y')">1Y</button>
-                            </div>
-                            <span class="text-11 text-slate-500">Live WebSocket tick feed</span>
-                        </div>
-
-                        <div class="h-80"><canvas id="asset-chart"></canvas></div>
-                    </div>
-
-                    <!-- Asset Metadata & Market Snapshot -->
-                    <div class="card p-5">
-                        <h3 class="font-semibold text-white mb-3">Market Snapshot &amp; Listing Info</h3>
-                        <div class="grid grid-2 md-grid-4 gap-4">
-                            <div>
-                                <p class="text-slate-500 text-xs">Ticker Symbol</p>
-                                <p id="m-symbol" class="font-semibold text-white mt-0-5">—</p>
-                            </div>
-                            <div>
-                                <p class="text-slate-500 text-xs">Asset Class</p>
-                                <p id="m-type" class="font-semibold text-white mt-0-5">—</p>
-                            </div>
-                            <div>
-                                <p class="text-slate-500 text-xs">Previous Close</p>
-                                <p id="m-prev" class="font-semibold text-white mt-0-5">—</p>
-                            </div>
-                            <div>
-                                <p class="text-slate-500 text-xs">Volatility Risk</p>
-                                <p id="m-risk" class="font-semibold text-white mt-0-5">—</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Settled Two-Way P2P Asset Transfers Ledger -->
-                    <div class="card p-5">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="font-semibold text-white">Settled Two-Way P2P Asset Transfers</h3>
-                            <span class="text-11 text-slate-500">Normalized trade ledger</span>
-                        </div>
-                        <div id="p2p-history" class="space-y-3">
-                            <p class="text-xs text-slate-500">Loading P2P trade history...</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right Column: Position Summary + Spot Trade + Two-Way P2P Trade Room -->
-                <div class="space-y-4">
-                    <!-- Your Position Card -->
-                    <div class="card p-5">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs text-slate-400">Available Wallet</span>
-                            <span id="p-wallet" class="text-sm font-bold text-white">0.00 VC</span>
-                        </div>
-                        <div id="p-position-box" class="sub-box">
-                            <p class="text-xs text-slate-500">Loading position...</p>
-                        </div>
-                    </div>
-
-                    <!-- Spot Buy / Sell Card -->
-                    <div class="card p-5">
-                        <div class="grid grid-2 gap-2 mb-4">
-                            <button id="btn-buy" type="button" class="btn btn-gain btn-full"
-                                onclick="setTradeMode('BUY')">Buy</button>
-                            <button id="btn-sell" type="button" class="btn btn-ghost btn-full"
-                                onclick="setTradeMode('SELL')">Sell</button>
-                        </div>
-                        <div id="trade-msg" class="sub-box text-xs mb-3" style="display:none;"></div>
-                        <div id="trade-body"></div>
-                    </div>
-
-                    <!-- Single-Asset Step-by-Step P2P Trade Room Card -->
-                    <div class="card p-5" id="p2p-room-card">
-                        <div class="flex items-center justify-between mb-1">
-                            <h3 class="font-semibold text-white">P2P Trade Room</h3>
-                            <span id="p2p-stage-badge" class="badge badge-sky">NEW REQUEST</span>
-                        </div>
-                        <p class="text-xs text-slate-500 mb-4">Invite a trader, lock live prices, and negotiate a
-                            1-asset swap.</p>
-                        <div id="p2p-room-body">
-                            <p class="text-xs text-slate-500">Loading trade room...</p>
-                        </div>
-                    </div>
-                </div>
+            <div class="flex items-center justify-between mt-4 mb-3">
+              <div class="flex gap-2" id="range-tabs">
+                <button class="range-btn active" data-range="1D" onclick="setRange('1D')">1D</button>
+                <button class="range-btn" data-range="1W" onclick="setRange('1W')">1W</button>
+                <button class="range-btn" data-range="1M" onclick="setRange('1M')">1M</button>
+                <button class="range-btn" data-range="1Y" onclick="setRange('1Y')">1Y</button>
+              </div>
+              <span class="text-11 text-slate-500">Live tick feed</span>
             </div>
+
+            <div class="h-80"><canvas id="asset-chart"></canvas></div>
+          </div>
+
+          <!-- Asset Metadata & Market Snapshot -->
+          <div class="card p-5">
+            <h3 class="font-semibold text-white mb-3">Market Snapshot &amp; Listing Info</h3>
+            <div class="grid grid-2 md-grid-4 gap-4">
+              <div>
+                <p class="text-slate-500 text-xs">Ticker Symbol</p>
+                <p id="m-symbol" class="font-semibold text-white mt-0-5">—</p>
+              </div>
+              <div>
+                <p class="text-slate-500 text-xs">Asset Class</p>
+                <p id="m-type" class="font-semibold text-white mt-0-5">—</p>
+              </div>
+              <div>
+                <p class="text-slate-500 text-xs">Previous Close</p>
+                <p id="m-prev" class="font-semibold text-white mt-0-5">—</p>
+              </div>
+              <div>
+                <p class="text-slate-500 text-xs">Volatility Risk</p>
+                <p id="m-risk" class="font-semibold text-white mt-0-5">—</p>
+              </div>
+            </div>
+          </div>
         </div>
-    </main>
 
-    <div id="toasts" class="toast-container"></div>
+        <!-- Right Column: Position Summary + Spot Trade -->
+        <div class="space-y-4">
+          <!-- Your Position Card -->
+          <div class="card p-5">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-slate-400">Available Wallet</span>
+              <span id="p-wallet" class="text-sm font-bold text-white">0.00 VC</span>
+            </div>
+            <div id="p-position-box" class="sub-box">
+              <p class="text-xs text-slate-500">Loading position...</p>
+            </div>
+          </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-    <script>
-        var user;
-        try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { user = null; }
-        if (!user) { window.location.replace('auth.html?mode=login'); }
+          <!-- Spot Buy / Sell Card -->
+          <div class="card p-5">
+            <div class="grid grid-2 gap-2 mb-4">
+              <button id="btn-buy" type="button" class="btn btn-gain btn-full"
+                onclick="setTradeMode('BUY')">Buy</button>
+              <button id="btn-sell" type="button" class="btn btn-ghost btn-full"
+                onclick="setTradeMode('SELL')">Sell</button>
+            </div>
+            <div id="trade-msg" class="sub-box text-xs mb-3" style="display:none;"></div>
+            <div id="trade-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
 
-        if (user.role === 'admin') {
-            document.getElementById('admin-link').style.display = 'block';
+  <div id="toasts" class="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script>
+    var user;
+    try { user = JSON.parse(localStorage.getItem('batua_user') || 'null'); } catch (e) { user = null; }
+    if (!user) { window.location.replace('auth.html?mode=login'); }
+
+    if (user && user.role === 'admin') {
+      document.getElementById('admin-link').style.display = 'block';
+    }
+    document.getElementById('logout').onclick = function () {
+      localStorage.removeItem('batua_user');
+      window.location.href = 'index.html';
+    };
+    if (user) {
+      document.getElementById('user-name').textContent = user.full_name || user.username;
+      document.getElementById('user-role').textContent = '@' + user.username + ' · ' + user.role;
+      document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'U')[0].toUpperCase();
+    }
+
+    var allAssets = [];
+    var currentAsset = null;
+    var selectedRange = '1D';
+    var tradeMode = 'BUY';
+    var orderInputMode = 'VC';
+    var currentWallet = Number((user && user.balance) || 0);
+    var currentPosition = null;
+    var assetChart = null;
+
+    function money(n, d) {
+      d = d === undefined ? 2 : d;
+      return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function pct(n) { return (Number(n || 0) >= 0 ? '+' : '') + Number(n || 0).toFixed(2) + '%'; }
+    function plCls(n) { return Number(n || 0) >= 0 ? 'text-gain' : 'text-loss'; }
+
+    function showToast(msg, variant, durationMs) {
+      var type = variant === true ? 'sell' : (variant || 'info');
+      var duration = durationMs || 4000;
+      var titleMap = { buy: 'Confirmed', sell: 'Executed', info: 'Notice' };
+
+      var box = document.getElementById('toasts');
+      var el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.style.setProperty('--toast-duration', duration + 'ms');
+
+      el.innerHTML =
+        '<div class="toast-body">' +
+        '<p class="toast-title">' + (titleMap[type] || 'Notice') + '</p>' +
+        '<p class="text-slate-200">' + msg + '</p>' +
+        '</div>' +
+        '<button type="button" class="toast-close" aria-label="Close">&times;</button>' +
+        '<div class="toast-progress"></div>';
+
+      var closed = false;
+      function dismiss() {
+        if (closed) return;
+        closed = true;
+        el.classList.add('closing');
+        setTimeout(function () { el.remove(); }, 220);
+      }
+
+      el.querySelector('.toast-close').onclick = dismiss;
+      box.appendChild(el);
+      setTimeout(dismiss, duration);
+    }
+
+    async function initPage() {
+      try {
+        var listRes = await fetch('/api/assets');
+        allAssets = await listRes.json();
+
+        var paramId = new URLSearchParams(window.location.search).get('id');
+        var target = allAssets.find(function (a) { return String(a.asset_id) === String(paramId); }) || allAssets[0];
+
+        var switcher = document.getElementById('asset-switcher');
+        switcher.innerHTML = allAssets.map(function (a) {
+          return '<option value="' + a.asset_id + '"' + (target && a.asset_id === target.asset_id ? ' selected' : '') + '>' +
+            a.symbol + ' — ' + a.name +
+            '</option>';
+        }).join('');
+
+        if (target) {
+          await loadAssetView(target.asset_id);
         }
-        document.getElementById('logout').onclick = function () {
-            localStorage.removeItem('batua_user');
-            window.location.href = 'index.html';
-        };
-        document.getElementById('user-name').textContent = user.full_name || user.username;
-        document.getElementById('user-role').textContent = '@' + user.username + ' · ' + user.role;
-        document.getElementById('user-avatar').textContent = (user.full_name || user.username || 'U')[0].toUpperCase();
+      } catch (err) {
+        showToast('Failed to load market assets.', 'info');
+      }
+    }
 
-        var allAssets = [];
-        var currentAsset = null;
-        var selectedRange = '1D';
-        var tradeMode = 'BUY';
-        var orderInputMode = 'VC';
-        var currentWallet = Number(user.balance || 0);
-        var currentPosition = null;
-        var assetChart = null;
+    async function switchAsset(newId) {
+      var id = String(newId || '').trim();
+      if (!id) return;
+      var url = new URL(window.location.href);
+      url.searchParams.set('id', id);
+      window.history.replaceState({}, '', url);
+      await loadAssetView(id);
+    }
 
-        function money(n, d) {
-            d = d === undefined ? 2 : d;
-            return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+    async function loadAssetView(assetId) {
+      try {
+        var res = await fetch('/api/assets/' + encodeURIComponent(assetId));
+        if (!res.ok) throw new Error('Asset not found');
+        currentAsset = await res.json();
+
+        renderAssetHeader();
+        renderTradeForm();
+
+        await Promise.all([
+          loadAssetChart(),
+          loadPosition()
+        ]);
+      } catch (err) {
+        showToast(err.message, 'info');
+      }
+    }
+
+    function renderAssetHeader() {
+      if (!currentAsset) return;
+      document.title = currentAsset.symbol + ' · BATUA-Edu';
+      document.getElementById('a-name').textContent = currentAsset.name;
+      document.getElementById('a-symbol-tag').textContent = currentAsset.symbol;
+
+      var typeEl = document.getElementById('a-type');
+      typeEl.textContent = currentAsset.asset_type;
+      typeEl.className = 'badge ' + (currentAsset.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock');
+
+      var riskEl = document.getElementById('a-risk');
+      riskEl.textContent = currentAsset.risk;
+      riskEl.className = 'badge ' + (currentAsset.risk === 'LOW' ? 'risk-low' : currentAsset.risk === 'MEDIUM' ? 'risk-medium' : 'risk-high');
+
+      document.getElementById('a-price').innerHTML = money(currentAsset.current_price) + ' <span class="text-sm text-slate-500 font-medium">VC</span>';
+      var chgEl = document.getElementById('a-chg');
+      chgEl.innerHTML = pct(currentAsset.price_change) + ' <span class="text-xs font-normal text-slate-500">24h</span>';
+      chgEl.className = 'font-bold ' + plCls(currentAsset.price_change);
+
+      document.getElementById('m-symbol').textContent = currentAsset.symbol;
+      document.getElementById('m-type').textContent = currentAsset.asset_type;
+      document.getElementById('m-prev').textContent = money(currentAsset.prev_close || currentAsset.current_price) + ' VC';
+      document.getElementById('m-risk').textContent = currentAsset.risk;
+    }
+
+    function setRange(range) {
+      selectedRange = range;
+      document.querySelectorAll('#range-tabs .range-btn').forEach(function (btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-range') === selectedRange);
+      });
+      loadAssetChart();
+    }
+
+    async function loadAssetChart() {
+      if (!currentAsset) return;
+      try {
+        var res = await fetch('/api/assets/' + encodeURIComponent(currentAsset.asset_id) + '/history?range=' + selectedRange);
+        var hist = await res.json();
+        var labels = hist.labels || [];
+        var prices = hist.prices || [];
+
+        if (currentAsset.current_price > 0) {
+          labels.push('Now');
+          prices.push(Number(currentAsset.current_price));
         }
-        function pct(n) { return (Number(n || 0) >= 0 ? '+' : '') + Number(n || 0).toFixed(2) + '%'; }
-        function plCls(n) { return Number(n || 0) >= 0 ? 'text-gain' : 'text-loss'; }
-        function fmtTime(ts) {
-            return new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-        }
 
-        function showToast(msg, variant, durationMs) {
-            var type = variant === true ? 'sell' : (variant || 'info');
-            var duration = durationMs || 4000;
-            var titleMap = { buy: 'Confirmed', sell: 'Executed', info: 'Notice' };
+        var ctx = document.getElementById('asset-chart');
+        if (assetChart) assetChart.destroy();
 
-            var box = document.getElementById('toasts');
-            var el = document.createElement('div');
-            el.className = 'toast toast-' + type;
-            el.style.setProperty('--toast-duration', duration + 'ms');
-
-            el.innerHTML =
-                '<div class="toast-body">' +
-                '<p class="toast-title">' + (titleMap[type] || 'Notice') + '</p>' +
-                '<p class="text-slate-200">' + msg + '</p>' +
-                '</div>' +
-                '<button type="button" class="toast-close" aria-label="Close">&times;</button>' +
-                '<div class="toast-progress"></div>';
-
-            var closed = false;
-            function dismiss() {
-                if (closed) return;
-                closed = true;
-                el.classList.add('closing');
-                setTimeout(function () { el.remove(); }, 220);
+        assetChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: prices,
+              borderColor: '#E5E5E5',
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              fill: true,
+              tension: 0.25,
+              pointRadius: prices.length < 15 ? 3 : 0,
+              pointBackgroundColor: '#FFFFFF',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#737373', maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
+              y: { ticks: { color: '#737373', font: { size: 10 } }, grid: { color: 'rgba(42, 42, 42, 0.7)' } }
             }
-
-            el.querySelector('.toast-close').onclick = dismiss;
-            box.appendChild(el);
-            setTimeout(dismiss, duration);
-        }
-
-        async function initPage() {
-            try {
-                var listRes = await fetch('/api/assets');
-                allAssets = await listRes.json();
-
-                var paramId = new URLSearchParams(window.location.search).get('id');
-                var target = allAssets.find(function (a) { return String(a.asset_id) === String(paramId); }) || allAssets[0];
-
-                var switcher = document.getElementById('asset-switcher');
-                switcher.innerHTML = allAssets.map(function (a) {
-                    return '<option value="' + a.asset_id + '"' + (target && a.asset_id === target.asset_id ? ' selected' : '') + '>' +
-                        a.symbol + ' — ' + a.name +
-                        '</option>';
-                }).join('');
-
-                if (target) {
-                    await loadAssetView(target.asset_id);
-                }
-                await loadTransferHistory();
-            } catch (err) {
-                showToast('Failed to load market assets.', 'info');
-            }
-        }
-
-        async function switchAsset(newId) {
-            var id = String(newId || '').trim();
-            if (!id) return;
-            var url = new URL(window.location.href);
-            url.searchParams.set('id', id);
-            window.history.replaceState({}, '', url);
-            await loadAssetView(id);
-        }
-
-        async function loadAssetView(assetId) {
-            try {
-                var res = await fetch('/api/assets/' + assetId);
-                if (!res.ok) throw new Error('Asset not found');
-                currentAsset = await res.json();
-
-                renderAssetHeader();
-                renderTradeForm();
-
-                await Promise.all([
-                    loadAssetChart(),
-                    loadPosition()
-                ]);
-            } catch (err) {
-                showToast(err.message, 'info');
-            }
-        }
-
-        function renderAssetHeader() {
-            if (!currentAsset) return;
-            document.title = currentAsset.symbol + ' · BATUA-Edu';
-            document.getElementById('a-name').textContent = currentAsset.name;
-            document.getElementById('a-symbol-tag').textContent = currentAsset.symbol;
-
-            var typeEl = document.getElementById('a-type');
-            typeEl.textContent = currentAsset.asset_type;
-            typeEl.className = 'badge ' + (currentAsset.asset_type === 'CRYPTO' ? 'type-crypto' : 'type-stock');
-
-            var riskEl = document.getElementById('a-risk');
-            riskEl.textContent = currentAsset.risk;
-            riskEl.className = 'badge ' + (currentAsset.risk === 'LOW' ? 'risk-low' : currentAsset.risk === 'MEDIUM' ? 'risk-medium' : 'risk-high');
-
-            document.getElementById('a-price').innerHTML = money(currentAsset.current_price) + ' <span class="text-sm text-slate-500 font-medium">VC</span>';
-            var chgEl = document.getElementById('a-chg');
-            chgEl.innerHTML = pct(currentAsset.price_change) + ' <span class="text-xs font-normal text-slate-500">24h</span>';
-            chgEl.className = 'font-bold ' + plCls(currentAsset.price_change);
-
-            document.getElementById('m-symbol').textContent = currentAsset.symbol;
-            document.getElementById('m-type').textContent = currentAsset.asset_type;
-            document.getElementById('m-prev').textContent = money(currentAsset.prev_close || currentAsset.current_price) + ' VC';
-            document.getElementById('m-risk').textContent = currentAsset.risk;
-        }
-
-        function setRange(range) {
-            selectedRange = range;
-            document.querySelectorAll('#range-tabs .range-btn').forEach(function (btn) {
-                btn.classList.toggle('active', btn.getAttribute('data-range') === selectedRange);
-            });
-            loadAssetChart();
-        }
-
-        async function loadAssetChart() {
-            if (!currentAsset) return;
-            try {
-                var res = await fetch('/api/assets/' + currentAsset.asset_id + '/history?range=' + selectedRange);
-                var hist = await res.json();
-                var labels = hist.labels || [];
-                var prices = hist.prices || [];
-
-                if (currentAsset.current_price > 0) {
-                    labels.push('Now');
-                    prices.push(Number(currentAsset.current_price));
-                }
-
-                var ctx = document.getElementById('asset-chart');
-                if (assetChart) assetChart.destroy();
-
-                assetChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            data: prices,
-                            borderColor: '#E5E5E5',
-                            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                            fill: true,
-                            tension: 0.25,
-                            pointRadius: prices.length < 15 ? 3 : 0,
-                            pointBackgroundColor: '#FFFFFF',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        animation: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: { ticks: { color: '#737373', maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
-                            y: { ticks: { color: '#737373', font: { size: 10 } }, grid: { color: 'rgba(42, 42, 42, 0.7)' } }
-                        }
-                    }
-                });
-            } catch (err) {
-                console.error('Chart load error:', err);
-            }
-        }
-
-        async function loadPosition() {
-            if (!currentAsset) return;
-            try {
-                var res = await fetch('/api/portfolio/' + user.user_id + '/asset/' + currentAsset.asset_id);
-                var data = await res.json();
-                currentWallet = Number(data.wallet_balance || 0);
-                currentPosition = data.position;
-
-                user.balance = currentWallet;
-                localStorage.setItem('batua_user', JSON.stringify(user));
-
-                var walletEl = document.getElementById('p-wallet');
-                if (walletEl) walletEl.textContent = money(currentWallet) + ' VC';
-
-                var box = document.getElementById('p-position-box');
-                if (box) {
-                    if (!currentPosition) {
-                        box.innerHTML = '<p class="text-xs text-slate-500">You do not currently hold any ' + currentAsset.symbol + '.</p>';
-                    } else {
-                        box.innerHTML =
-                            '<div class="flex justify-between text-xs mb-1">' +
-                            '<span class="text-slate-400">Your Holdings</span>' +
-                            '<span class="font-semibold text-white">' + Number(currentPosition.qty).toFixed(6) + ' ' + currentAsset.symbol + '</span>' +
-                            '</div>' +
-                            '<div class="flex justify-between text-xs mb-1">' +
-                            '<span class="text-slate-400">Amount Invested</span>' +
-                            '<span class="text-slate-200">' + money(currentPosition.invested) + ' VC (Avg ' + money(currentPosition.avg_price) + ')</span>' +
-                            '</div>' +
-                            '<div class="flex justify-between text-xs">' +
-                            '<span class="text-slate-400">Current Value &amp; P&amp;L</span>' +
-                            '<span class="font-semibold ' + plCls(currentPosition.pl) + '">' +
-                            money(currentPosition.current_value) + ' VC (' + (currentPosition.pl >= 0 ? '+' : '') + money(currentPosition.pl) + ')' +
-                            '</span>' +
-                            '</div>';
-                    }
-                }
-                renderTradeForm();
-            } catch (err) {
-                console.error('Position error:', err);
-            }
-        }
-
-        function setTradeMode(mode) {
-            tradeMode = mode;
-            orderInputMode = mode === 'BUY' ? 'VC' : 'UNITS';
-            document.getElementById('trade-msg').style.display = 'none';
-            renderTradeForm();
-        }
-
-        function setOrderInputMode(unitMode) {
-            orderInputMode = unitMode;
-            renderTradeForm();
-        }
-
-        function fillOrderPct(pctVal) {
-            if (!currentAsset) return;
-            var input = document.getElementById('trade-val');
-            if (!input) return;
-
-            var px = Number(currentAsset.current_price || 0);
-            if (tradeMode === 'BUY') {
-                var availVc = Math.max(0, currentWallet) * pctVal;
-                if (orderInputMode === 'VC') {
-                    input.value = availVc.toFixed(2);
-                } else if (px > 0) {
-                    input.value = (availVc / px).toFixed(6);
-                }
-            } else {
-                var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
-                var targetQty = maxQty * pctVal;
-                if (orderInputMode === 'UNITS') {
-                    input.value = pctVal === 1 ? maxQty : Number(targetQty.toFixed(6));
-                } else {
-                    input.value = (targetQty * px).toFixed(2);
-                }
-            }
-            input.dispatchEvent(new Event('input'));
-        }
-
-        function renderTradeForm() {
-            if (!currentAsset) return;
-            document.getElementById('btn-buy').className = tradeMode === 'BUY' ? 'btn btn-gain btn-full' : 'btn btn-ghost btn-full';
-            document.getElementById('btn-sell').className = tradeMode === 'SELL' ? 'btn btn-loss btn-full' : 'btn btn-ghost btn-full';
-
-            var isBuy = tradeMode === 'BUY';
-            var isVc = orderInputMode === 'VC';
-            var labelText = isBuy
-                ? (isVc ? 'Amount to invest (VC)' : 'Quantity to buy (' + currentAsset.symbol + ')')
-                : (isVc ? 'Amount to sell (VC)' : 'Quantity to sell (' + currentAsset.symbol + ')');
-            var placeholderText = isVc ? 'e.g. 500' : 'e.g. 0.25';
-            var estLabel = isVc ? 'Estimated units' : (isBuy ? 'Estimated cost' : 'Estimated proceeds');
-            var hasBalance = isBuy ? currentWallet > 0 : (currentPosition && Number(currentPosition.qty) > 0);
-
-            var presetsHtml = hasBalance
-                ? '<div class="grid gap-2 mt-2" style="grid-template-columns: repeat(4, minmax(0, 1fr));">' +
-                '<button type="button" class="range-btn" onclick="fillOrderPct(0.10)">10%</button>' +
-                '<button type="button" class="range-btn" onclick="fillOrderPct(0.25)">25%</button>' +
-                '<button type="button" class="range-btn" onclick="fillOrderPct(0.50)">50%</button>' +
-                '<button type="button" class="range-btn" onclick="fillOrderPct(1)">Max</button>' +
-                '</div>'
-                : '';
-
-            var body = document.getElementById('trade-body');
-            body.innerHTML =
-                '<div class="flex justify-between items-center mb-1">' +
-                '<label class="text-xs text-slate-400">' + labelText + '</label>' +
-                '<div class="flex items-center gap-2">' +
-                '<button type="button" class="range-btn ' + (isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'VC\')">VC</button>' +
-                '<button type="button" class="range-btn ' + (!isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'UNITS\')">' + currentAsset.symbol + '</button>' +
-                '</div>' +
-                '</div>' +
-                '<input id="trade-val" class="input mt-1" type="number" min="0" step="any" placeholder="' + placeholderText + '">' +
-                presetsHtml +
-                '<div class="sub-box text-xs mt-3 flex justify-between">' +
-                '<span class="text-slate-500">' + estLabel + '</span>' +
-                '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
-                '</div>' +
-                '<button id="exec-btn" class="btn ' + (isBuy ? 'btn-gain' : 'btn-loss') + ' btn-full mt-3" onclick="executeOrder()">' +
-                (isBuy ? 'Buy ' : 'Sell ') + currentAsset.symbol +
-                '</button>';
-
-            document.getElementById('trade-val').oninput = function () {
-                var val = Number(this.value);
-                var px = Number(currentAsset.current_price || 0);
-                var estEl = document.getElementById('trade-est');
-                if (!val || val <= 0 || px <= 0) {
-                    estEl.textContent = '—';
-                    return;
-                }
-                if (isVc) {
-                    estEl.textContent = (val / px).toFixed(6) + ' ' + currentAsset.symbol;
-                } else {
-                    estEl.textContent = money(val * px) + ' VC';
-                }
-            };
-        }
-
-        async function executeOrder() {
-            if (!currentAsset) return;
-            var btn = document.getElementById('exec-btn');
-            var msgBox = document.getElementById('trade-msg');
-            msgBox.style.display = 'none';
-
-            var rawVal = Number(document.getElementById('trade-val').value);
-            var px = Number(currentAsset.current_price || 0);
-            if (!rawVal || rawVal <= 0) return showToast('Enter a valid amount or quantity.', 'info');
-            if (px <= 0) return showToast('Live price unavailable.', 'info');
-
-            var url = tradeMode === 'BUY' ? '/api/trades/buy' : '/api/trades/sell';
-            var payload = { user_id: user.user_id, asset_id: currentAsset.asset_id };
-
-            if (tradeMode === 'BUY') {
-                payload.amount = orderInputMode === 'VC' ? rawVal : Number((rawVal * px).toFixed(2));
-                if (payload.amount <= 0) return showToast('Calculated VC amount is too small.', 'info');
-            } else {
-                var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
-                var calcQty = orderInputMode === 'UNITS' ? rawVal : (rawVal / px);
-                if (maxQty > 0 && Math.abs(calcQty - maxQty) <= 1e-6) {
-                    calcQty = maxQty;
-                }
-                payload.quantity = calcQty;
-                if (payload.quantity <= 0) return showToast('Enter a valid quantity to sell.', 'info');
-            }
-
-            btn.disabled = true;
-            btn.textContent = 'Executing...';
-
-            try {
-                var res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Order failed.');
-
-                showToast(data.message, tradeMode === 'BUY' ? 'buy' : 'sell', 4000);
-                await Promise.all([loadPosition(), loadUserHoldingsForP2P()]);
-            } catch (err) {
-                msgBox.textContent = err.message;
-                msgBox.className = 'sub-box text-xs text-loss mb-3';
-                msgBox.style.display = 'block';
-            } finally {
-                btn.disabled = false;
-                btn.textContent = (tradeMode === 'BUY' ? 'Buy ' : 'Sell ') + currentAsset.symbol;
-            }
-        }
-
-        // Option 2: Single-Asset Step-by-Step P2P Negotiation Room
-        var activeRoom = null;
-        var userHoldings = [];
-
-        async function loadUserHoldingsForP2P() {
-            try {
-                var res = await fetch('/api/portfolio/' + user.user_id);
-                var data = await res.json();
-                userHoldings = data.holdings || [];
-            } catch (_) { }
-        }
-
-        async function loadTransferHistory() {
-            try {
-                await loadUserHoldingsForP2P();
-                var res = await fetch('/api/p2p/rooms/' + user.user_id);
-                var data = await res.json();
-                activeRoom = data.active_room;
-                renderP2PRoom();
-
-                var list = data.history || [];
-                var box = document.getElementById('p2p-history');
-                if (!list.length) {
-                    box.innerHTML = '<p class="text-xs text-slate-500">No settled single-asset P2P swaps yet.</p>';
-                    return;
-                }
-
-                box.innerHTML = list.map(function (t) {
-                    return '<div class="flex items-center justify-between text-xs pb-2" style="border-bottom:1px solid var(--border-color);">' +
-                        '<div>' +
-                        '<p class="text-sm font-semibold text-white">' +
-                        Number(t.gave_qty).toFixed(6) + ' ' + t.gave_symbol +
-                        ' <span class="text-slate-400">&rlarr;</span> ' +
-                        Number(t.got_qty).toFixed(6) + ' ' + t.got_symbol +
-                        '</p>' +
-                        '<p class="text-11 text-slate-500 mt-0-5">Swapped with @' + t.counterparty + ' &middot; ' + fmtTime(t.timestamp) + '</p>' +
-                        '</div>' +
-                        '<div class="text-right">' +
-                        '<p class="font-medium text-slate-200">' + money(t.total_amount) + ' VC</p>' +
-                        '<p class="text-10 text-slate-500">Locked value</p>' +
-                        '</div>' +
-                        '</div>';
-                }).join('');
-            } catch (err) {
-                document.getElementById('p2p-history').innerHTML = '<p class="text-xs text-loss">Failed to load P2P history.</p>';
-            }
-        }
-
-        function updateSingleOfferEstimate() {
-            if (!activeRoom) return;
-            var sel = document.getElementById('offer-asset-sel');
-            var qty = Number(document.getElementById('offer-asset-qty')?.value || 0);
-            var estEl = document.getElementById('offer-total-vc');
-            if (!sel || !estEl) return;
-
-            var sym = sel.options[sel.selectedIndex]?.getAttribute('data-sym') || '';
-            var px = Number(activeRoom.frozen_prices[sym] || 0);
-            estEl.textContent = (qty > 0 && px > 0) ? money(qty * px) + ' VC' : '0.00 VC';
-        }
-
-        function autoMatchTargetQty() {
-            if (!activeRoom || !activeRoom.offer_a) return;
-            var sel = document.getElementById('offer-asset-sel');
-            var qtyInp = document.getElementById('offer-asset-qty');
-            if (!sel || !qtyInp) return;
-
-            var sym = sel.options[sel.selectedIndex]?.getAttribute('data-sym') || '';
-            var px = Number(activeRoom.frozen_prices[sym] || 0);
-            if (px > 0) {
-                qtyInp.value = (activeRoom.offer_a.total_vc / px).toFixed(6);
-                updateSingleOfferEstimate();
-            }
-        }
-
-        function renderP2PRoom() {
-            var badge = document.getElementById('p2p-stage-badge');
-            var body = document.getElementById('p2p-room-body');
-            if (!badge || !body) return;
-
-            if (!activeRoom) {
-                badge.textContent = 'NEW REQUEST';
-                body.innerHTML =
-                    '<div class="space-y-3">' +
-                    '<div>' +
-                    '<label class="text-xs text-slate-400">Trader Username</label>' +
-                    '<input id="invite-user" class="input mt-1" placeholder="e.g. meera">' +
-                    '</div>' +
-                    '<button type="button" class="btn btn-primary btn-full" onclick="sendTradeInvite()">Send Trade Request</button>' +
-                    '</div>';
-                return;
-            }
-
-            var isMaker = activeRoom.maker.user_id === user.user_id;
-            var peerName = isMaker ? activeRoom.taker.username : activeRoom.maker.username;
-            badge.textContent = activeRoom.status;
-
-            if (activeRoom.status === 'INVITED') {
-                if (isMaker) {
-                    body.innerHTML =
-                        '<div class="sub-box text-xs space-y-2">' +
-                        '<p class="text-slate-200">Waiting for <strong>@' + peerName + '</strong> to accept your trade request...</p>' +
-                        '<p class="text-11 text-slate-500">Live prices will lock the moment they accept.</p>' +
-                        '</div>' +
-                        '<button type="button" class="btn btn-ghost btn-full mt-3" onclick="reviewOffer(\'LEAVE\')">Cancel Request</button>';
-                } else {
-                    body.innerHTML =
-                        '<div class="sub-box text-xs space-y-2">' +
-                        '<p class="text-slate-200"><strong>@' + peerName + '</strong> invited you to a single-asset trade!</p>' +
-                        '<p class="text-11 text-slate-500">Accepting locks live market prices for the negotiation.</p>' +
-                        '</div>' +
-                        '<div class="grid grid-2 gap-2 mt-3">' +
-                        '<button type="button" class="btn btn-gain btn-full" onclick="respondInvite(true)">Accept Request</button>' +
-                        '<button type="button" class="btn btn-loss btn-full" onclick="respondInvite(false)">Decline</button>' +
-                        '</div>';
-                }
-                return;
-            }
-
-            var myTurnToBuild = (isMaker && activeRoom.status === 'A_BUILDING') || (!isMaker && activeRoom.status === 'B_BUILDING');
-            if (myTurnToBuild) {
-                var targetBanner = !isMaker
-                    ? '<div class="confirm-box mb-3">' +
-                    '<p class="font-semibold">@' + peerName + ' Offers: ' + Number(activeRoom.offer_a.qty).toFixed(6) + ' ' + activeRoom.offer_a.symbol + '</p>' +
-                    '<p class="text-11 mt-1">Select 1 asset worth <strong>' + money(activeRoom.offer_a.total_vc) + ' VC</strong> (±0.50 VC) at locked prices.</p>' +
-                    '</div>'
-                    : '<p class="text-11 text-slate-400 mb-3">' + activeRoom.last_note + '</p>';
-
-                var eligible = userHoldings.filter(function (h) {
-                    return isMaker || !activeRoom.offer_a || String(h.asset_id) !== String(activeRoom.offer_a.asset_id);
-                });
-
-                var holdingOpts = eligible.length
-                    ? eligible.map(function (h) {
-                        var fPx = Number(activeRoom.frozen_prices[h.symbol] || h.unit_price);
-                        return '<option value="' + h.asset_id + '" data-sym="' + h.symbol + '">' +
-                            h.symbol + ' (Avail: ' + Number(h.qty).toFixed(4) + ' @ ' + money(fPx) + ')' +
-                            '</option>';
-                    }).join('')
-                    : '<option value="">No eligible assets held</option>';
-
-                body.innerHTML =
-                    targetBanner +
-                    '<div class="space-y-3">' +
-                    '<div>' +
-                    '<div class="flex justify-between items-center">' +
-                    '<label class="text-xs text-slate-400">Select 1 Asset &amp; Quantity</label>' +
-                    (!isMaker ? '<button type="button" class="range-btn" onclick="autoMatchTargetQty()">Auto-Match Value</button>' : '') +
-                    '</div>' +
-                    '<div class="flex gap-2 mt-1">' +
-                    '<select id="offer-asset-sel" class="input" onchange="updateSingleOfferEstimate()">' + holdingOpts + '</select>' +
-                    '<input id="offer-asset-qty" type="number" min="0" step="any" class="input" style="max-width:7rem;" placeholder="Qty" oninput="updateSingleOfferEstimate()">' +
-                    '</div>' +
-                    '</div>' +
-                    '<div class="sub-box text-xs flex justify-between">' +
-                    '<span class="text-slate-500">Locked Offer Value</span>' +
-                    '<span id="offer-total-vc" class="font-semibold text-white">0.00 VC</span>' +
-                    '</div>' +
-                    '<div class="flex gap-2">' +
-                    '<button type="button" class="btn btn-primary flex-1" onclick="submitSingleOffer()">Submit Offer</button>' +
-                    '<button type="button" class="btn btn-ghost shrink-0" onclick="reviewOffer(\'LEAVE\')">Leave</button>' +
-                    '</div>' +
-                    '</div>';
-                return;
-            }
-
-            var myTurnToReview = (!isMaker && activeRoom.status === 'B_REVIEWING') || (isMaker && activeRoom.status === 'A_REVIEWING');
-            if (myTurnToReview) {
-                var inc = isMaker ? activeRoom.offer_b : activeRoom.offer_a;
-                var acceptLabel = isMaker ? 'Accept & Settle Swap' : 'Accept & Select My Asset';
-
-                body.innerHTML =
-                    '<div class="sub-box text-xs space-y-2 mb-3">' +
-                    '<p class="text-slate-400">Offer from <strong>@' + peerName + '</strong> (Locked Prices):</p>' +
-                    '<p class="text-sm font-semibold text-white">' + Number(inc.qty).toFixed(6) + ' ' + inc.symbol + ' (' + money(inc.total_vc) + ' VC)</p>' +
-                    (isMaker
-                        ? '<p class="text-11 text-slate-400">Your Side: <strong>' + Number(activeRoom.offer_a.qty).toFixed(6) + ' ' + activeRoom.offer_a.symbol + '</strong></p>'
-                        : '') +
-                    '</div>' +
-                    '<div class="space-y-2">' +
-                    '<button type="button" class="btn btn-gain btn-full" onclick="reviewOffer(\'ACCEPT\')">' + acceptLabel + '</button>' +
-                    '<div class="grid grid-2 gap-2">' +
-                    '<button type="button" class="btn btn-loss btn-full" onclick="reviewOffer(\'REJECT\')">Reject Offer</button>' +
-                    '<button type="button" class="btn btn-ghost btn-full" onclick="reviewOffer(\'LEAVE\')">Leave Trade</button>' +
-                    '</div>' +
-                    '</div>';
-                return;
-            }
-
-            body.innerHTML =
-                '<div class="sub-box text-xs space-y-2">' +
-                '<p class="text-slate-200">' + activeRoom.last_note + '</p>' +
-                '<p class="text-11 text-slate-500">Waiting on <strong>@' + peerName + '</strong>...</p>' +
-                '</div>' +
-                '<button type="button" class="btn btn-ghost btn-full mt-3" onclick="reviewOffer(\'LEAVE\')">Leave Trade</button>';
-        }
-
-        async function sendTradeInvite() {
-            var uname = (document.getElementById('invite-user')?.value || '').trim();
-            if (!uname) return showToast('Enter a username to invite.', 'info');
-            try {
-                var res = await fetch('/api/p2p/invite', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ maker_id: user.user_id, taker_username: uname })
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Invite failed');
-                activeRoom = data.room;
-                renderP2PRoom();
-                showToast(data.message, 'buy', 3500);
-            } catch (err) {
-                showToast(err.message, 'info');
-            }
-        }
-
-        async function respondInvite(accept) {
-            if (!activeRoom) return;
-            try {
-                var res = await fetch('/api/p2p/' + activeRoom.room_id + '/respond-invite', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: user.user_id, accept: accept })
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Failed');
-                activeRoom = accept ? data.room : null;
-                renderP2PRoom();
-                showToast(data.message, accept ? 'buy' : 'sell', 3500);
-            } catch (err) {
-                showToast(err.message, 'info');
-            }
-        }
-
-        async function submitSingleOffer() {
-            if (!activeRoom) return;
-            var assetId = (document.getElementById('offer-asset-sel')?.value || '').trim();
-            var qty = Number(document.getElementById('offer-asset-qty')?.value || 0);
-            if (!assetId || qty <= 0) return showToast('Select an asset and enter a valid quantity.', 'info');
-
-            try {
-                var res = await fetch('/api/p2p/' + activeRoom.room_id + '/submit-offer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: user.user_id, asset_id: assetId, qty: qty })
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Failed to submit offer');
-                activeRoom = data.room;
-                renderP2PRoom();
-                showToast(data.message, 'buy', 3500);
-            } catch (err) {
-                showToast(err.message, 'info');
-            }
-        }
-
-        async function reviewOffer(decision) {
-            if (!activeRoom) return;
-            try {
-                var res = await fetch('/api/p2p/' + activeRoom.room_id + '/review', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: user.user_id, decision: decision })
-                });
-                var data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Action failed');
-
-                if (decision === 'LEAVE' || data.room.status === 'SETTLED') {
-                    activeRoom = null;
-                    await Promise.all([loadPosition(), loadTransferHistory()]);
-                } else {
-                    activeRoom = data.room;
-                    renderP2PRoom();
-                }
-                showToast(data.message, decision === 'ACCEPT' ? 'buy' : 'sell', 4000);
-            } catch (err) {
-                showToast(err.message, 'info');
-            }
-        }
-
-        // Live SSE price streaming & P2P room sync
-        var evtSource = new EventSource('/api/stream');
-        evtSource.onmessage = function (e) {
-            var tick = JSON.parse(e.data);
-            if (!currentAsset || tick.symbol !== currentAsset.symbol) return;
-
-            currentAsset.current_price = tick.current_price;
-            currentAsset.price_change = tick.price_change;
-            renderAssetHeader();
-
-            if (assetChart && assetChart.data.datasets[0].data.length > 0) {
-                var arr = assetChart.data.datasets[0].data;
-                arr[arr.length - 1] = tick.current_price;
-                assetChart.update('none');
-            }
-        };
-
-        evtSource.addEventListener('p2p', function (e) {
-            var room = JSON.parse(e.data);
-            if (room.maker.user_id !== user.user_id && room.taker.user_id !== user.user_id) return;
-
-            if (room.status === 'SETTLED' || room.status === 'CLOSED') {
-                activeRoom = null;
-                showToast(room.last_note, room.status === 'SETTLED' ? 'buy' : 'sell', 4000);
-                loadPosition();
-                loadTransferHistory();
-            } else {
-                activeRoom = room;
-                loadUserHoldingsForP2P().then(renderP2PRoom);
-            }
+          }
         });
+      } catch (err) {
+        console.error('Chart load error:', err);
+      }
+    }
 
-        initPage();
-    </script>
+    async function loadPosition() {
+      if (!currentAsset) return;
+      try {
+        var res = await fetch('/api/portfolio/' + encodeURIComponent(user.user_id) + '/asset/' + encodeURIComponent(currentAsset.asset_id));
+        var data = await res.json();
+        currentWallet = Number(data.wallet_balance || 0);
+        currentPosition = data.position;
+
+        user.balance = currentWallet;
+        localStorage.setItem('batua_user', JSON.stringify(user));
+
+        var walletEl = document.getElementById('p-wallet');
+        if (walletEl) walletEl.textContent = money(currentWallet) + ' VC';
+
+        var box = document.getElementById('p-position-box');
+        if (box) {
+          if (!currentPosition) {
+            box.innerHTML = '<p class="text-xs text-slate-500">You do not currently hold any ' + currentAsset.symbol + '.</p>';
+          } else {
+            box.innerHTML =
+              '<div class="flex justify-between text-xs mb-1">' +
+              '<span class="text-slate-400">Your Holdings</span>' +
+              '<span class="font-semibold text-white">' + Number(currentPosition.qty).toFixed(6) + ' ' + currentAsset.symbol + '</span>' +
+              '</div>' +
+              '<div class="flex justify-between text-xs mb-1">' +
+              '<span class="text-slate-400">Amount Invested</span>' +
+              '<span class="text-slate-200">' + money(currentPosition.invested) + ' VC (Avg ' + money(currentPosition.avg_price) + ')</span>' +
+              '</div>' +
+              '<div class="flex justify-between text-xs">' +
+              '<span class="text-slate-400">Current Value &amp; P&amp;L</span>' +
+              '<span class="font-semibold ' + plCls(currentPosition.pl) + '">' +
+              money(currentPosition.current_value) + ' VC (' + (currentPosition.pl >= 0 ? '+' : '') + money(currentPosition.pl) + ')' +
+              '</span>' +
+              '</div>';
+          }
+        }
+        renderTradeForm();
+      } catch (err) {
+        console.error('Position error:', err);
+      }
+    }
+
+    function setTradeMode(mode) {
+      tradeMode = mode;
+      orderInputMode = mode === 'BUY' ? 'VC' : 'UNITS';
+      document.getElementById('trade-msg').style.display = 'none';
+      renderTradeForm();
+    }
+
+    function setOrderInputMode(unitMode) {
+      orderInputMode = unitMode;
+      renderTradeForm();
+    }
+
+    function fillOrderPct(pctVal) {
+      if (!currentAsset) return;
+      var input = document.getElementById('trade-val');
+      if (!input) return;
+
+      var px = Number(currentAsset.current_price || 0);
+      if (tradeMode === 'BUY') {
+        var availVc = Math.max(0, currentWallet) * pctVal;
+        if (orderInputMode === 'VC') {
+          input.value = availVc.toFixed(2);
+        } else if (px > 0) {
+          input.value = (availVc / px).toFixed(6);
+        }
+      } else {
+        var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
+        var targetQty = maxQty * pctVal;
+        if (orderInputMode === 'UNITS') {
+          input.value = pctVal === 1 ? maxQty : Number(targetQty.toFixed(6));
+        } else {
+          input.value = (targetQty * px).toFixed(2);
+        }
+      }
+      input.dispatchEvent(new Event('input'));
+    }
+
+    function renderTradeForm() {
+      if (!currentAsset) return;
+      document.getElementById('btn-buy').className = tradeMode === 'BUY' ? 'btn btn-gain btn-full' : 'btn btn-ghost btn-full';
+      document.getElementById('btn-sell').className = tradeMode === 'SELL' ? 'btn btn-loss btn-full' : 'btn btn-ghost btn-full';
+
+      var isBuy = tradeMode === 'BUY';
+      var isVc = orderInputMode === 'VC';
+      var labelText = isBuy
+        ? (isVc ? 'Amount to invest (VC)' : 'Quantity to buy (' + currentAsset.symbol + ')')
+        : (isVc ? 'Amount to sell (VC)' : 'Quantity to sell (' + currentAsset.symbol + ')');
+      var placeholderText = isVc ? 'e.g. 500' : 'e.g. 0.25';
+      var estLabel = isVc ? 'Estimated units' : (isBuy ? 'Estimated cost' : 'Estimated proceeds');
+      var hasBalance = isBuy ? currentWallet > 0 : (currentPosition && Number(currentPosition.qty) > 0);
+
+      var presetsHtml = hasBalance
+        ? '<div class="grid gap-2 mt-2" style="grid-template-columns: repeat(4, minmax(0, 1fr));">' +
+        '<button type="button" class="range-btn" onclick="fillOrderPct(0.10)">10%</button>' +
+        '<button type="button" class="range-btn" onclick="fillOrderPct(0.25)">25%</button>' +
+        '<button type="button" class="range-btn" onclick="fillOrderPct(0.50)">50%</button>' +
+        '<button type="button" class="range-btn" onclick="fillOrderPct(1)">Max</button>' +
+        '</div>'
+        : '';
+
+      var body = document.getElementById('trade-body');
+      body.innerHTML =
+        '<div class="flex justify-between items-center mb-1">' +
+        '<label class="text-xs text-slate-400">' + labelText + '</label>' +
+        '<div class="flex items-center gap-2">' +
+        '<button type="button" class="range-btn ' + (isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'VC\')">VC</button>' +
+        '<button type="button" class="range-btn ' + (!isVc ? 'active' : '') + '" onclick="setOrderInputMode(\'UNITS\')">' + currentAsset.symbol + '</button>' +
+        '</div>' +
+        '</div>' +
+        '<input id="trade-val" class="input mt-1" type="number" min="0" step="any" placeholder="' + placeholderText + '">' +
+        presetsHtml +
+        '<div class="sub-box text-xs mt-3 flex justify-between">' +
+        '<span class="text-slate-500">' + estLabel + '</span>' +
+        '<span class="font-semibold text-white" id="trade-est">&mdash;</span>' +
+        '</div>' +
+        '<button id="exec-btn" class="btn ' + (isBuy ? 'btn-gain' : 'btn-loss') + ' btn-full mt-3" onclick="executeOrder()">' +
+        (isBuy ? 'Buy ' : 'Sell ') + currentAsset.symbol +
+        '</button>';
+
+      document.getElementById('trade-val').oninput = function () {
+        var val = Number(this.value);
+        var px = Number(currentAsset.current_price || 0);
+        var estEl = document.getElementById('trade-est');
+        if (!val || val <= 0 || px <= 0) {
+          estEl.textContent = '—';
+          return;
+        }
+        if (isVc) {
+          estEl.textContent = (val / px).toFixed(6) + ' ' + currentAsset.symbol;
+        } else {
+          estEl.textContent = money(val * px) + ' VC';
+        }
+      };
+    }
+
+    async function executeOrder() {
+      if (!currentAsset) return;
+      var btn = document.getElementById('exec-btn');
+      var msgBox = document.getElementById('trade-msg');
+      msgBox.style.display = 'none';
+
+      var rawVal = Number(document.getElementById('trade-val').value);
+      var px = Number(currentAsset.current_price || 0);
+      if (!rawVal || rawVal <= 0) return showToast('Enter a valid amount or quantity.', 'info');
+      if (px <= 0) return showToast('Live price unavailable.', 'info');
+
+      var url = tradeMode === 'BUY' ? '/api/trades/buy' : '/api/trades/sell';
+      var payload = { user_id: user.user_id, asset_id: currentAsset.asset_id };
+
+      if (tradeMode === 'BUY') {
+        payload.amount = orderInputMode === 'VC' ? rawVal : Number((rawVal * px).toFixed(2));
+        if (payload.amount <= 0) return showToast('Calculated VC amount is too small.', 'info');
+      } else {
+        var maxQty = currentPosition ? Number(currentPosition.qty) : 0;
+        var calcQty = orderInputMode === 'UNITS' ? rawVal : (rawVal / px);
+        if (maxQty > 0 && Math.abs(calcQty - maxQty) <= 1e-6) {
+          calcQty = maxQty;
+        }
+        payload.quantity = calcQty;
+        if (payload.quantity <= 0) return showToast('Enter a valid quantity to sell.', 'info');
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Executing...';
+
+      try {
+        var res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Order failed.');
+
+        showToast(data.message, tradeMode === 'BUY' ? 'buy' : 'sell', 4000);
+        await loadPosition();
+      } catch (err) {
+        msgBox.textContent = err.message;
+        msgBox.className = 'sub-box text-xs text-loss mb-3';
+        msgBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = (tradeMode === 'BUY' ? 'Buy ' : 'Sell ') + currentAsset.symbol;
+      }
+    }
+
+    // Live SSE price streaming
+    var evtSource = new EventSource('/api/stream');
+    evtSource.onmessage = function (e) {
+      var tick;
+      try { tick = JSON.parse(e.data); } catch (_) { return; }
+      if (!tick || !currentAsset || tick.symbol !== currentAsset.symbol) return;
+
+      currentAsset.current_price = tick.current_price;
+      currentAsset.price_change = tick.price_change;
+      renderAssetHeader();
+
+      if (assetChart && assetChart.data.datasets[0].data.length > 0) {
+        var arr = assetChart.data.datasets[0].data;
+        arr[arr.length - 1] = tick.current_price;
+        assetChart.update('none');
+      }
+    };
+
+    initPage();
+  </script>
 </body>
 
 </html>
